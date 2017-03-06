@@ -1,0 +1,38 @@
+## Temporary files
+*.DS_Store
+*.DS_Store?
+*._*
+*.Spotlight-V100
+*.Trashes
+*ehthumbs.db
+*Thumbs.db
+*~
+*.fuse_hidden*
+
+## Compiled files
+*.o
+*.a
+*.obj
+*.bin
+*.lib
+*.dylib
+*.so
+*bin*
+*include*
+*lib*
+*tcl*
+
+## CVS and doc folders
+*CVS*
+*doc*
+*refdoc*
+
+
+## others
+command.*
+depend.mk
+dtimodel
+merge_parts
+split_parts
+.gitignore
+set.sh
