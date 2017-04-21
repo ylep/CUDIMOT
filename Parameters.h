@@ -26,11 +26,12 @@
 #include <fstream>
 #include "newmat.h"
 #include "newimage/newimageall.h"
-#include "utils.h"
+#include "checkcudacalls.h"
 #include "cudimotoptions.h"
 #include "Model.h"
 #include "dMRI_Data.h"
-#include "mymodels/mymodel.h"
+#include "getPredictedSignal.h"
+#include "modelparameters.h"
 
 namespace Cudimot{
 
@@ -51,7 +52,22 @@ namespace Cudimot{
     /**
      * Number of Fixed Parameters in the model (different for each voxel)
      */
-    int nFP;
+    int nFixP;
+
+    /**
+     * Total size of volumes of Fixed Parameter
+     */
+    int FixP_Tsize;
+
+    /**
+     * Value of the fixed parameters of the voxels of a single part
+     */
+    T* FixP_host;
+
+    /**
+     * Value of the fixed parameters of the voxels of a single part allocated on the GPU
+     */
+    T* FixP_gpu;
     
     /////////////////////////////////////////////////////////////////
     /// COMMON (to all voxels) FIXED PARAMETERS (bvals,bvecs,...) ///
@@ -66,6 +82,20 @@ namespace Cudimot{
      * Total size of Common Fixed Parameters (without counting measurements)
      */
     int CFP_Tsize;
+
+    /**
+     * Value of the common (to all voxels) fixed parameters
+     * CFP1_meas1, CFP2_meas1, CFP3_meas1 ... CFP1_meas2, CFP2_meas2 ...
+     */
+    T* CFP_host;
+
+    /**
+     * Value of the common (to all voxels) fixed parameters allocated on the GPU
+     */
+    T* CFP_gpu;
+
+    /////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////
     
     /**
      * Number of Voxels included in the data
@@ -104,34 +134,10 @@ namespace Cudimot{
     T* params_host;
     
     /**
-     * Value of the fixed parameters of the voxels of a single part
-     */
-    T* FP_host;
-
-    /**
-     * Value of the common (to all voxels) fixed parameters
-     * CFP1_meas1, CFP2_meas1, CFP3_meas1 ... CFP1_meas2, CFP2_meas2 ...
-     */
-    T* CFP_host;
-    
-    //T* priors_host; // Priors of model parameters
-    // T* prop_sd_host; // Standard deviation for Gaussian proposal distributions of parameters
-
-    /**
      * Parameter (to estimate) values of the voxels in a single part allocated on the GPU
      */
     T* params_gpu;
 
-    /**
-     * Value of the fixed parameters of the voxels of a single part allocated on the GPU
-     */
-    T* FP_gpu;
-
-    /**
-     * Value of the common (to all voxels) fixed parameters allocated on the GPU
-     */
-    T* CFP_gpu;
-    
     // For MCMC step
     
     /**
@@ -149,8 +155,31 @@ namespace Cudimot{
      */
     int nsamples;
     
-    //T* priors_gpu;
-    //T* prop_sd_gpu;
+    /**
+     * Predicted Signal by the model (on the host)
+     */
+    T* predSignal_host;
+
+    /**
+     * Predicted Signal by the model (on the gpu)
+     */
+    T* predSignal_gpu;
+
+    /**
+     * Class with the method to get the Predicted Signal by the model (on the gpu)
+     */
+    getPredictedSignal<T> PredictedSignal;
+   
+    /**
+     * Tau. If rician noise, tau is is 1/sigma with sigma the scale parameter. Values for each voxel/sample on the host.
+     */
+    T* tau_samples_host;
+    
+    /**
+     * Tau. If rician noise, tau is is 1/sigma with sigma the scale parameter. Values for each voxel/sample on the GPU.
+     */
+    T* tau_samples_gpu;
+
     
   public:
 
@@ -183,12 +212,23 @@ namespace Cudimot{
     int getTsize_CFP();
 
     /**
-     * @return A pointer to the Common Fixed Parameters  (on the GPU)
+     * @return Total size of Fixed Parameters (without counting voxels)
+     */
+    int getTsize_FixP();
+
+    /**
+     * @return A pointer to the Common Fixed Parameters (on the GPU)
      */
     T* getCFP();
+
+    /**
+     * @return A pointer to the Fixed Parameters for a part of the data (on the GPU)
+     */
+    T* getFixP_part(int part);
     
     /**
-     * Copies the value of the estimated parameters of a part from GPU to the host array with all the parameter values (at its correct position)
+     * Copies the value of the estimated parameters of a part from GPU to the host array with all the parameter values (at its correct position). 
+     * If getPredictedSignal, the method calculate the predicted signal for this part.
      * @param part A number to identify a part of the data
      */
     void copyParamsPartGPU2Host(int part);
@@ -208,6 +248,11 @@ namespace Cudimot{
      * Writes to a binary file the samples of the parameters
      */
     void writeSamples();
+
+    /**
+     * @return A pointer to the tau parameter samples of each voxel (on the GPU)
+     */ 
+    T* getTauSamples();
   };
 }
 

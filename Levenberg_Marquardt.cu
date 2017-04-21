@@ -7,104 +7,260 @@
 /* CCOPYRIGHT */
 
 #include "Levenberg_Marquardt.h"
-#include "utils.h"
-#include "cudimotoptions.h"
-#include "mymodels/mymodel.h"
-#include MYMODEL_FUNCTIONS
+#include "functions_gpu.h"
+#include "modelparameters.h"
+#include "modelfunctions.h"
 
 namespace Cudimot{
+
+#define THREADS_VOXEL 32 // Multiple of 32: Threads collaborating to compute a voxel. Do not change this, otherwise Synchronization will be needed
 
 #define CFTOL 1.0e-8
 #define LTOL 1.0e20
 #define EPS_gpu 2.0e-16 //Losely based on NRinC 20.1
+#define TwoDivPI 0.636619772367581
+#define PIDivTwo 1.5707962 // 1.57079632679
+#define avoidErrors 1e-6 // Avoid maximum and minimums because tan(pi/2) is undefined to inf
   
-  __device__ inline bool zero_cf_diff_conv(double* cfo,double* cfn){
-    return(2.0*fabs(*cfo-*cfn) <= CFTOL*(fabs(*cfo)+fabs(*cfn)+EPS_gpu));
+  __constant__ int LMbound_types [NPARAMS];
+  __constant__ float LMbounds_min [NPARAMS];
+  __constant__ float LMbounds_max [NPARAMS];
+  
+  __device__ inline bool zero_cf_diff_conv(double* cfold, double* cfnew){
+    return(2.0*fabs(*cfold-*cfnew) <= CFTOL*(fabs(*cfold)+fabs(*cfnew)+EPS_gpu));
+  }
+
+  template <typename T>
+  __device__ inline void MinMaxInvTransform(int idpar, T* params, T* transfParams){
+    //if(threadIdx.x==0) printf("ORIG  %.20f \n",params[idpar]);
+
+    if(params[idpar]<=((T)LMbounds_min[idpar]+(T)avoidErrors)) params[idpar]+=(T)avoidErrors;
+    if(params[idpar]>=((T)LMbounds_max[idpar]-(T)avoidErrors)) params[idpar]-=(T)avoidErrors;
+    // Avoid maximum and minimum because tan(pi/2) is undefined to inf
+
+    //if(threadIdx.x==0) printf("corrected  %.20f \n",params[idpar]);
+    
+    transfParams[idpar] = params[idpar]-(((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
+    transfParams[idpar] *= ((T)2.0/(((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])*(T)TwoDivPI));
+    
+    //if(threadIdx.x==0) printf("before TAN  %.20f \n",transfParams[idpar]);
+
+    //if(transfParams[idpar]>(T)PIDivTwo){
+    //  transfParams[idpar]=(T)PIDivTwo; // if > pi/2 single precision issues
+    //}
+    //if(transfParams[idpar]<(T)(-PIDivTwo)){
+    //  transfParams[idpar]=(T)(-PIDivTwo); // if < -pi/2 single precision issues
+    //}
+    //if(threadIdx.x==0) printf("before TAN 2 %.20f \n",transfParams[idpar]);
+    
+    transfParams[idpar] = tan_gpu(transfParams[idpar]);
+
+    //T agg  = (((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])/(T)2.0);
+    // agg *= atan_gpu(transfParams[idpar]);
+    // agg *=  (T)TwoDivPI;
+    // agg += (((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
+
+    //if(threadIdx.x==0) printf("transform %f into %f and reverse %f \n",params[idpar],transfParams[idpar],agg);
   }
   
   template <typename T>
-  __device__ void Cost_Function(int idSubVOX,
-				int nmeas,
-				int CFP_Tsize,
-				T* measurements,
-				T* parameters,
-				T* fixed_params,
-				T* CFP,
-				double* result)
+  __device__ inline void MinMaxTransform(int idpar, T* params, T* transfParams){ 
+    params[idpar] = (((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])/(T)2.0);
+    params[idpar] *= atan_gpu(transfParams[idpar]);
+    params[idpar] *=  (T)TwoDivPI;
+    params[idpar] += (((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
+
+    if(params[idpar]<=((T)LMbounds_min[idpar]+(T)avoidErrors)){ 
+      params[idpar]+=(T)avoidErrors;
+      transfParams[idpar] = params[idpar]-(((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
+      transfParams[idpar] *= ((T)2.0/(((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])*(T)TwoDivPI));
+      transfParams[idpar] = tan_gpu(transfParams[idpar]);
+    }
+    if(params[idpar]>=((T)LMbounds_max[idpar]-(T)avoidErrors)){ 
+      params[idpar]-=(T)avoidErrors;
+      transfParams[idpar] = params[idpar]-(((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
+      transfParams[idpar] *= ((T)2.0/(((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])*(T)TwoDivPI));
+      transfParams[idpar] = tan_gpu(transfParams[idpar]);
+    }
+    // Avoid maximum and minimum because tan(pi/2) is undefined to inf
+  }
+  
+  template <typename T>
+  __device__ inline void MinInvTransform(int idpar, T* params, T* transfParams){
+    transfParams[idpar] = log_gpu(params[idpar]-(T)LMbounds_min[idpar]);
+  }
+  
+  template <typename T>
+  __device__ inline void MinTransform(int idpar, T* params, T* transfParams){
+    params[idpar] = exp_gpu(transfParams[idpar]) + (T)LMbounds_min[idpar];
+  }
+  template <typename T>
+  __device__ inline void MaxInvTransform(int idpar, T* params, T* transfParams){
+    transfParams[idpar] = log_gpu((T)LMbounds_max[idpar]-params[idpar]);
+  }
+  
+  template <typename T>
+  __device__ inline void MaxTransform(int idpar, T* params, T* transfParams){
+    params[idpar] = (T)LMbounds_max[idpar] - exp_gpu(transfParams[idpar]);
+  }
+
+  template <typename T>
+  __device__ inline void invtransformAll(T* params, T* transfParams){
+    #pragma unroll
+    for(int p=0; p<NPARAMS; p++){	
+      if(LMbound_types[p]==BMIN)
+	MinInvTransform(p,params,transfParams);
+      else if(LMbound_types[p]==BMAX)
+	MaxInvTransform(p,params,transfParams);
+      else if(LMbound_types[p]==BMINMAX)
+	MinMaxInvTransform(p,params,transfParams);
+      else
+	transfParams[p]=params[p];
+    }
+  }
+
+  template <typename T>
+  __device__ inline void transformAll(T* params, T* transfParams){
+    #pragma unroll
+    for(int p=0; p<NPARAMS; p++){	
+      if(LMbound_types[p]==BMIN)
+	MinTransform(p,params,transfParams);
+      else if(LMbound_types[p]==BMAX)
+	MaxTransform(p,params,transfParams);
+      else if(LMbound_types[p]==BMINMAX)
+	MinMaxTransform(p,params,transfParams);
+      else
+	params[p]=transfParams[p];
+    }
+  }
+  
+  template <typename T>
+  __device__ inline void derivative_transf(T* transfParams, T* derivatives){
+    #pragma unroll
+    for(int p=0; p<NPARAMS; p++){
+      //if(threadIdx.x==0) printf("Input derivatve %.20f\n",derivatives[p]);
+      if(LMbound_types[p]==BMIN)
+	derivatives[p]=derivatives[p]*exp_gpu(transfParams[p]);
+      else if(LMbound_types[p]==BMAX)
+	derivatives[p]=derivatives[p]*(-exp_gpu(transfParams[p]));
+      else if(LMbound_types[p]==BMINMAX){
+	derivatives[p]=derivatives[p]*((LMbounds_max[p]-LMbounds_min[p])/(T)2.0)*((T)1.0/((T)1.0+(transfParams[p]*transfParams[p])))*(T)TwoDivPI;
+      }
+      //else keep the same
+
+      //if(threadIdx.x==0) printf("Output derivative %.20f from transPara %f\n",derivatives[p],transfParams[p]);
+    }
+  }
+  
+  template <typename T, bool DEBUG>
+  __device__ inline void Cost_Function(int idSubVOX,
+				       int nmeas,
+				       int CFP_Tsize,
+				       T* measurements,
+				       T* parameters,
+				       T* CFP,
+				       T* FixP,
+				       double* result,
+				       int debugVOX)
   {
     int idMeasurement=idSubVOX;
-    T accumulated_error=0;
-
+    T accumulated_error=(T)0.0;
+    
     int nmeas2compute = nmeas/THREADS_VOXEL;
     if (idSubVOX<(nmeas%THREADS_VOXEL)) nmeas2compute++;
-
+    
     for(int iter=0;iter<nmeas2compute;iter++){
       T* myCFP = &CFP[idMeasurement*CFP_Tsize];
-      T pred_error=Predicted_Signal(NPARAMS,parameters,fixed_params,myCFP);
+      T pred_error=Predicted_Signal(NPARAMS,parameters,myCFP,FixP);
+      
+      if(DEBUG){
+	int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
+	if(idVOX==debugVOX && idSubVOX==0){
+	  printf("PredictedSignal[%i]: %f\n",idMeasurement,pred_error);
+	}
+      }
       
       pred_error=pred_error-measurements[idMeasurement];
       accumulated_error+=pred_error*pred_error;
       idMeasurement+=THREADS_VOXEL;
     }
-    
-    for (int offset=THREADS_VOXEL/2; offset>0; offset/=2){
-      accumulated_error+= __shfl_down(accumulated_error,offset);
+
+    #pragma unroll
+    for(int offset=THREADS_VOXEL/2; offset>0; offset>>=1){
+      accumulated_error+= shfl_down(accumulated_error,offset);
     }
     if(idSubVOX==0){
       *result=accumulated_error;
+      if(DEBUG){
+	int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
+	if(idVOX==debugVOX && idSubVOX==0){
+	   printf("COST FUNTION: %f\n",*result);
+	}
+      }
     }
   }
   
-  template <typename T>
-  __device__ void Calculate_Gradient(int idSubVOX,
-				     int nmeas,
-				     int CFP_Tsize,
-				     T* measurements,
-				     T* parameters,
-				     T* fixed_params,
-				     T* CFP,
-				     T* Gradient)
+  template <typename T, bool DEBUG>
+  __device__ inline void Calculate_Gradient(int idSubVOX,
+					    int nmeas,
+					    int CFP_Tsize,
+					    T* measurements,
+					    T* parameters,
+					    T* params_transf,
+					    T* CFP,
+					    T* FixP,
+					    T* Gradient,
+					    int debugVOX)
   {
     int idMeasurement=idSubVOX;
     T myderivatives[NPARAMS];
     
     int max_iters = nmeas/THREADS_VOXEL;
     if(nmeas%THREADS_VOXEL) max_iters++;
-    
+
     if(idSubVOX==0){
-      // #pragma unroll NPARAMS ... nvcc does not like this
-      // warning: extra characters in the unroll pragma (expected a single positive integer), ignoring pragma for this loop
-#pragma unroll
+      #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	Gradient[p]=0;
+	Gradient[p]=(T)0.0;
       }
     }
     
     for(int iter=0;iter<max_iters;iter++){
+      #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-     	myderivatives[p]=0; // Maybe idMeasurement > nmeas
+	// Maybe idMeasurement > nmeas, so set to 0
+     	myderivatives[p]=(T)0.0; 
       }
       T* myCFP = &CFP[idMeasurement*CFP_Tsize];
-      T pred_error=0;
-
+      T pred_error=(T)0.0;
+      
       if(idMeasurement<nmeas){
-	pred_error=Predicted_Signal(NPARAMS,parameters,fixed_params,myCFP);
+	pred_error=Predicted_Signal(NPARAMS,parameters,myCFP,FixP);
 	pred_error=pred_error-measurements[idMeasurement];
 	
-	Partial_Derivatives(NPARAMS,parameters,fixed_params,myCFP,myderivatives);
+	Partial_Derivatives(NPARAMS,parameters,myCFP,FixP,myderivatives);
+	derivative_transf(params_transf,myderivatives);
+
+	if(DEBUG){
+	  int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
+	  if(idVOX==debugVOX && idSubVOX==0){
+	    for(int i=0;i<NPARAMS;i++){
+	      printf("Derivatives Measurement[%i]_Parameter[%i]: %f\n",idMeasurement,i,myderivatives[i]);
+	    }
+	  }
+	}
       }
       
-      // #pragma unroll NPARAMS ... nvcc does not like this
-#pragma unroll 
+      #pragma unroll 
       for(int p=0;p<NPARAMS;p++){
-	myderivatives[p]=2.0*pred_error*myderivatives[p];
-	for (int offset=THREADS_VOXEL/2; offset>0; offset/=2){
-	  myderivatives[p]+= __shfl_down(myderivatives[p],offset);
+	myderivatives[p]=(T)2.0*pred_error*myderivatives[p];
+	#pragma unroll 
+	for (int offset=THREADS_VOXEL/2; offset>0; offset>>=1){
+	  myderivatives[p]+= shfl_down(myderivatives[p],offset);
 	}
       }
       if(idSubVOX==0){
-	// #pragma unroll NPARAMS ... nvcc does not like this
-#pragma unroll
+        #pragma unroll
 	for(int p=0;p<NPARAMS;p++){
 	  Gradient[p]+=myderivatives[p];
 	}
@@ -114,14 +270,15 @@ namespace Cudimot{
   }
 
   template <typename T>
-  __device__ void Calculate_Hessian(int idSubVOX,
-				    int nmeas,
-				    int CFP_Tsize,
-				    T* measurements,
-				    T* parameters,
-				    T* fixed_params,
-				    T* CFP,
-				    T* Hessian)
+  __device__ inline void Calculate_Hessian(int idSubVOX,
+					   int nmeas,
+					   int CFP_Tsize,
+					   T* measurements,
+					   T* parameters,
+					   T* params_transf,
+					   T* CFP,
+					   T* FixP,
+					   T* Hessian)
   {
     int idMeasurement=idSubVOX;
     T myderivatives[NPARAMS];
@@ -130,9 +287,11 @@ namespace Cudimot{
     if(nmeas%THREADS_VOXEL) max_dir++;
     
     if(idSubVOX==0){
+      #pragma unroll
       for(int p=0;p<NPARAMS;p++){
+	#pragma unroll
 	for(int p2=0;p2<NPARAMS;p2++){
-	  Hessian[p*NPARAMS+p2]=0;
+	  Hessian[p*NPARAMS+p2]=(T)0.0;
 	}
       }
     }
@@ -141,24 +300,27 @@ namespace Cudimot{
 
       T* myCFP = &CFP[idMeasurement*CFP_Tsize];
 
+      #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	myderivatives[p]=0;
+	myderivatives[p]=(T)0.0;
       }
-      T pred_error=0;
+      T pred_error=(T)0.0;
 
       if(idMeasurement<nmeas){
-	pred_error=Predicted_Signal(NPARAMS,parameters,fixed_params,myCFP);
+	pred_error=Predicted_Signal(NPARAMS,parameters,myCFP,FixP);
 	pred_error=pred_error-measurements[idMeasurement];
-	Partial_Derivatives(NPARAMS,parameters,fixed_params,myCFP, myderivatives);
+	Partial_Derivatives(NPARAMS,parameters,myCFP,FixP,myderivatives);
+	derivative_transf(params_transf,myderivatives);
       }
-      
-// #pragma unroll NPARAMS ... nvcc does not like this
-#pragma unroll
+ 
+      #pragma unroll
       for(int p=0;p<NPARAMS;p++){
+	#pragma unroll
 	for(int p2=0;p2<NPARAMS;p2++){
-	  T element = 2.0 * myderivatives[p] * myderivatives[p2];
-	  for (int offset=THREADS_VOXEL/2; offset>0; offset/=2){
-	    element+= __shfl_down(element,offset);
+	  T element = (T)2.0 * myderivatives[p] * myderivatives[p2];
+	  #pragma unroll
+	  for (int offset=THREADS_VOXEL/2; offset>0; offset>>=1){
+	    element+= shfl_down(element,offset);
 	  }
 	  if(idSubVOX==0){
 	    Hessian[p*NPARAMS+p2]+=element;
@@ -169,11 +331,12 @@ namespace Cudimot{
     }  
   }
   
+  // Hessian * X  =  Gradient -> Calculate X
   template <typename T>
-  __device__ void LUsolver(int idSubVOX,
-			   T* Hessian,
-			   T* Gradient,
-			   T* Solution){
+  __device__ inline void LUsolver(int idSubVOX,
+				  T* Hessian,
+				  T* Gradient,
+				  T* Solution){
     
     // If NPARAMS > 32 the current version of the method will fail !!
     // Need to generalise
@@ -183,16 +346,19 @@ namespace Cudimot{
     
     // Initialise Matrix. Each thread contains a column of the Hessian and one thread the Gradient column:   Matrix = [Hessian | Gradient]
     if (idSubVOX<NPARAMS){
+      #pragma unroll
       for(int p=0;p<NPARAMS;p++){
 	col_elems[p] = Hessian[p*NPARAMS+idSubVOX];
       }
     }else if(idSubVOX==NPARAMS){
+      #pragma unroll
       for(int p=0;p<NPARAMS;p++){
 	col_elems[p] = Gradient[p];
       }
     }else{
+      #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	col_elems[p] = 0;
+	col_elems[p] = (T)0.0;
       }
     }
     
@@ -201,34 +367,38 @@ namespace Cudimot{
     // Backward step: Zero's above diagonal
 
     // Forward step
+    #pragma unroll
     for (int col=0; col<NPARAMS; col++){
       // Divide row by diagonal element (1 in the diagonal)
       // Cannot have negative numbers in the diagonal -r/-r = +1
       pivot = col_elems[col];
-      pivot = __shfl(pivot,col);
+      pivot = shfl(pivot,col);
       col_elems[col] = col_elems[col]/pivot; 
       
       // Eliminate all terms under diagonal element (1)
       // Pivot is the element to make zero, Pivot-Pivot*1 = 0
       // This_row = This_row - Pivot * row_of_diagonal_element
+      #pragma unroll
       for (int row=col+1; row<NPARAMS; row++){
 	pivot  = col_elems[row];
-	pivot  = __shfl(pivot,col);
+	pivot  = shfl(pivot,col);
 	col_elems[row] -= pivot*col_elems[col];
       }
     }
 
     // Backward step
+    #pragma unroll
     for (int col=NPARAMS-1; col>0; col--) {
       // Eliminate all terms above diagonal element
       for (int row=0; row<col; row++) {
 	pivot  = col_elems[row];
-	pivot  = __shfl(pivot,col);
+	pivot  = shfl(pivot,col);
 	col_elems[row] -= pivot*col_elems[col];
       }
     }
 
     if(idSubVOX==NPARAMS){
+      #pragma unroll
       for(int p=0;p<NPARAMS;p++){
 	Solution[p] = col_elems[p];
       }
@@ -236,15 +406,17 @@ namespace Cudimot{
     
   }
   
-  template <typename T, bool MARQUARDT>
+  template <typename T, bool MARQUARDT, bool DEBUG>
   __global__ void levenberg_kernel(
-				   int nvox, // nvoxels
 				   int nmeas, // nmeasurements
-				   int CFP_Tsize, //size*M-measurements
+				   int CFP_Tsize, // common fixed params: size*M-measurements
+				   int FixP_Tsize, // fixed params: size*Nvoxels 
 				   T* meas, // measurements
 				   T* parameters, // model parameters 
-				   T* CFP, // common fixed model parameters
-				   int nmax_iters)
+				   T* CFP_global, // common fixed model parameters
+				   T* FixP, // fixed model parameters
+				   int nmax_iters,
+				   int debugVOX)
 {
   // 1 block of threads process several voxels
   // Each warp processes 1 voxel
@@ -254,15 +426,16 @@ namespace Cudimot{
   bool leader = (idSubVOX==0);  // Some steps are performed by only one thread of the warp
     
   ////////// DYNAMIC SHARED MEMORY ///////////
-  extern __shared__ double shared[];				//Size:
-  double* pcf = (double*) shared;				//VOXELS_BLOCK 
+  extern  __shared__ double shared[];				//Size:
+  double* pcf = (double*) shared;    				//VOXELS_BLOCK 
   double* ncf = (double*) &pcf[VOXELS_BLOCK];			//VOXELS_BLOCK
   double* lambda = (double*) &ncf[VOXELS_BLOCK];		//VOXELS_BLOCK
   double* olambda = (double*) &lambda[VOXELS_BLOCK];		//VOXELS_BLOCK
   
-  T* S_CFP = (T*) &olambda[VOXELS_BLOCK];			//nmeas*CMP_Tsize
-  T* params = (T*) &S_CFP[nmeas*CFP_Tsize]; 			//NPARAMS*VOXELS_BLOCK
-  T* Gradient = (T*) &params[NPARAMS*VOXELS_BLOCK];		//NPARAMS*VOXELS_BLOCK
+  T* CFP = (T*) &olambda[VOXELS_BLOCK];				//nmeas*CMP_Tsize
+  T* params = (T*) &CFP[nmeas*CFP_Tsize]; 			//NPARAMS*VOXELS_BLOCK
+  T* params_transf = (T*) &params[NPARAMS*VOXELS_BLOCK];         //NPARAMS*VOXELS_BLOCK
+  T* Gradient = (T*) &params_transf[NPARAMS*VOXELS_BLOCK];     	//NPARAMS*VOXELS_BLOCK
   T* Hessian = (T*) &Gradient[NPARAMS*VOXELS_BLOCK];		//NPARAMS*NPARAMS*VOXELS_BLOCK
   T* step = (T*) &Hessian[NPARAMS*NPARAMS*VOXELS_BLOCK];	//NPARAMS*VOXELS_BLOCK
   
@@ -273,18 +446,20 @@ namespace Cudimot{
   /// Copy common fixed model parameters to Shared Memory ///
   if(threadIdx.x==0){ // only one thread of the whole block. Common to all voxels
     for(int i=0;i<nmeas*CFP_Tsize;i++){
-      S_CFP[i]=CFP[i];
+      CFP[i]=CFP_global[i];
     }
   }
   ///////////////////////////////////////////////////////////
 
   ///////// each voxel/warp of the block points to its data///////////
   meas = &meas[idVOX*nmeas]; //Global memory
+  FixP = &FixP[idVOX*FixP_Tsize]; // Global memory
   pcf = &pcf[idVOX_inBlock];
   ncf = &ncf[idVOX_inBlock];
   lambda = &lambda[idVOX_inBlock];
   olambda = &olambda[idVOX_inBlock];
-  params = &params[idVOX_inBlock*NPARAMS];
+  params = (T*)&params[idVOX_inBlock*NPARAMS];
+  params_transf = &params_transf[idVOX_inBlock*NPARAMS];
   Gradient = &Gradient[idVOX_inBlock*NPARAMS];
   Hessian = &Hessian[idVOX_inBlock*NPARAMS*NPARAMS];
   step = &step[idVOX_inBlock*NPARAMS];
@@ -300,25 +475,60 @@ namespace Cudimot{
     *lambda=0.1;
     *olambda= 0.0;    
     *ncf=0.0;
+    #pragma unroll
     for(int i=0;i<NPARAMS;i++){
       params[i]=parameters[idVOX*NPARAMS+i];
     }
+    if(DEBUG){
+      if(idVOX==debugVOX){
+	printf("\n ----- Levenberg_Marquardt GPU algorithm: voxel %i -----\n",idVOX);
+	for(int i=0;i<NPARAMS;i++){
+	  printf("Initial Parameter[%i]: %f\n",i,params[i]);
+	}
+	for(int i=0;i<CFP_Tsize;i++){
+	  printf("Commonn Fixed Params[%i]: ",i);
+	  for(int j=0;j<nmeas;j++){
+	    printf("%f ",CFP_global[j*CFP_Tsize+i]);
+	  }
+	  printf("\n");
+	}
+	printf("Fix Parameters: ");
+	for(int i=0;i< FixP_Tsize;i++){
+	  printf("%f, ",FixP[i]);
+	}
+	printf("\n--------------------------------------------------------\n",idVOX);  
+      }
+    }
+    invtransformAll(params,params_transf); //calculate params_transf  
   }
+  // __threadfence_block();
   __syncthreads();
   ///////////////////////////////////////////
 
-  T* fixed_params=new T[1]; // TODO: add feature
-  Cost_Function(idSubVOX,nmeas,CFP_Tsize,meas,params,fixed_params,S_CFP,pcf);
-  
-  while (!( (*success) && iter++>=nmax_iters)){ 
+  Cost_Function<T,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,CFP,FixP,pcf,debugVOX);
+  if(DEBUG){
+    if(idVOX==debugVOX&&leader){
+      printf("--------------------------------------------------------\n");  
+    }
+  }
+    
+  while (!( (*success) && iter++>=nmax_iters)){
     //if success we don't increase niter (first condition is true)
     //function cost has been decreased, we have advanced.
-    if(*success){
-      Calculate_Gradient(idSubVOX,nmeas,CFP_Tsize,meas,params,fixed_params,S_CFP,Gradient);
-      Calculate_Hessian(idSubVOX,nmeas,CFP_Tsize,meas,params,fixed_params,S_CFP,Hessian);
+
+    if(DEBUG){
+      if(idVOX==debugVOX&&leader){
+	printf("---------------------- Iteration %i ---------------------\n",iter);
+      }
     }
-    
+
+    if(*success){
+      Calculate_Gradient<T,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,params_transf,CFP,FixP,Gradient,debugVOX);
+      Calculate_Hessian(idSubVOX,nmeas,CFP_Tsize,meas,params,params_transf,CFP,FixP,Hessian);
+    }
+        
     if(leader){
+      #pragma unroll
       for (int i=0; i<NPARAMS; i++){
 	if(MARQUARDT)
 	  Hessian[(i*NPARAMS)+i]=((1+(*lambda))/(1+(*olambda)))*Hessian[i*NPARAMS+i];	//Levenberg-Marquardt
@@ -326,23 +536,46 @@ namespace Cudimot{
 	  Hessian[(i*NPARAMS)+i]+=(*lambda)-(*olambda);	//Levenberg
       }
     }
-    
+
+    //__threadfence_block(); // Hessian & Gradient updated
+    __syncthreads();    
     LUsolver(idSubVOX,Hessian,Gradient,step);
+    // Hessian & Gradient updated // LU solution updated by thread(NPARAMS)
+    __syncthreads(); 
 
     if(leader){
-      for(int i=0;i<NPARAMS;i++){
-	step[i]=params[i]-step[i];
+      #pragma unroll
+      for(int p=0;p<NPARAMS;p++){
+	step[p]=params_transf[p]-step[p];
+      }
+      transformAll(params,step);
+
+      if(DEBUG){
+	if(idVOX==debugVOX){
+	  for(int i=0;i<NPARAMS;i++){
+	    printf("Gradient[%i]: %f   ",i,Gradient[i]);
+	  }
+	  printf("\n");
+	  for(int i=0;i<NPARAMS;i++){
+	    printf("Proposed[%i]: %f   ",i,params[i]);
+	  }
+	  printf("\n");
+	}
       }
     }
-    __syncthreads();
     
-    Cost_Function(idSubVOX,nmeas,CFP_Tsize,meas,step,fixed_params,S_CFP,ncf);
+    //__threadfence_block();  // params updated
+    __syncthreads(); 
+    Cost_Function<T,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,CFP,FixP,ncf,debugVOX);
+    //__threadfence_block(); // Leader may be faster an update params
+    __syncthreads(); 
 
     if(leader){
       if ( *success = ((*ncf) < (*pcf))){ 
 	*olambda = 0.0;
+        #pragma unroll
 	for(int i=0;i<NPARAMS;i++){
-	  params[i]=step[i];
+	  params_transf[i]=step[i];
 	}
 	*lambda=(*lambda)/10.0;
 	
@@ -356,40 +589,86 @@ namespace Cudimot{
 	if(*lambda > LTOL){ 
 	 *end=true;
 	}
+	// undo step in parameters
+	transformAll(params,params_transf);
       }
-    }	
-    __syncthreads();
+      if(DEBUG){
+	if(idVOX==debugVOX){
+	  printf("--------------------------------------------------------\n");  
+	}
+      }
+    }
+    //__threadfence_block(); // end,sucess updated
+    __syncthreads(); 
+
     if(*end) break;		
   }
+ 
   if(leader){
+    // Change parameters if needed: FixConstraints()
+    FixConstraintsLM(NPARAMS,params);
+    // save parameters in global
+    #pragma unroll
     for(int i=0;i<NPARAMS;i++){
       parameters[idVOX*NPARAMS+i]=params[i];
     }
+    if(DEBUG){
+      if(idVOX==debugVOX){
+	for(int i=0;i<NPARAMS;i++){
+	  printf("Final Parameter[%i]: %f\n",i,params[i]);
+	}
+      }
+    }
   }
-  __syncthreads();
 }
   
   
   template <typename T>
-  Levenberg_Marquardt<T>::Levenberg_Marquardt(){
+  Levenberg_Marquardt<T>::Levenberg_Marquardt(vector<int> bou_types, 
+					      vector<T> bou_min, 
+					      vector<T> bou_max)
+  {
     cudimotOptions& opts = cudimotOptions::getInstance();
     max_iterations=opts.iterLevMar.value();
-    Marquardt=opts.useMarquardt.value();
+    Marquardt=true;
+    if(opts.no_Marquardt.value()) Marquardt=false;
+    DEBUG=false;
+    if(opts.debug.set()){
+      DEBUG=true;
+      debugVOX= atoi(opts.debug.value().data());
+    }
+
+    // Set bounds
+    bound_types_host = new int[NPARAMS];
+    bounds_min_host = new float[NPARAMS];
+    bounds_max_host = new float[NPARAMS];
+    
+    for(int p=0;p<NPARAMS;p++){
+      bound_types_host[p]=bou_types[p];
+      bounds_min_host[p]=bou_min[p];
+      bounds_max_host[p]=bou_max[p];
+    }
+    
+    cudaMemcpyToSymbol(LMbound_types,bound_types_host,NPARAMS*sizeof(int));
+    cudaMemcpyToSymbol(LMbounds_min,bounds_min_host,NPARAMS*sizeof(float));
+    cudaMemcpyToSymbol(LMbounds_max,bounds_max_host,NPARAMS*sizeof(float));
+    sync_check("Levenberg_Marquardt: Setting Bounds");
   }
   
   template <typename T>
   void Levenberg_Marquardt<T>::run(
 				   int nvox, int nmeas,
-				   int CFP_size,
+				   int CFP_size, int FixP_size,
 				   T* meas,
 				   T* params,
-				   T* CFP) 
+				   T* CFP, T* FixP) 
   {
     
     long int amount_shared_mem = 0;
     amount_shared_mem += 4*VOXELS_BLOCK*sizeof(double); // Levenberg parameters
     amount_shared_mem += (nmeas*CFP_size)*sizeof(T); // CFP
     amount_shared_mem += (NPARAMS*VOXELS_BLOCK)*sizeof(T); // Parameters
+    amount_shared_mem += (NPARAMS*VOXELS_BLOCK)*sizeof(T); // Params_transf
     amount_shared_mem += (NPARAMS*VOXELS_BLOCK)*sizeof(T); // Gradient
     amount_shared_mem += (NPARAMS*NPARAMS*VOXELS_BLOCK)*sizeof(T); // Hessian
     amount_shared_mem += 2*VOXELS_BLOCK*sizeof(int); // Levenberg parameters
@@ -401,10 +680,18 @@ namespace Cudimot{
     int nblocks=(nvox/VOXELS_BLOCK);
     if(nvox%VOXELS_BLOCK) nblocks++;
     
-    if(Marquardt){
-      levenberg_kernel<T,true><<<nblocks,threads_block,amount_shared_mem>>>(nvox,nmeas,CFP_size,meas,params,CFP,max_iterations);
+    if(!DEBUG){
+      if(Marquardt){
+	levenberg_kernel<T,true,false><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+      }else{
+	levenberg_kernel<T,false,false><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+      }
     }else{
-      levenberg_kernel<T,false><<<nblocks,threads_block,amount_shared_mem>>>(nvox,nmeas,CFP_size,meas,params,CFP,max_iterations);
+      if(Marquardt){
+	levenberg_kernel<T,true,true><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+      }else{
+	levenberg_kernel<T,false,true><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+      }
     }
     sync_check("Levenberg_Marquardt Kernel");
   }

@@ -6,7 +6,7 @@
 
 /*  CCOPYRIGHT  */
 
-#include "utils.h"
+#include "checkcudacalls.h"
 #include <fstream>
 
 void init_gpu(){

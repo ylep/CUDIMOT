@@ -27,10 +27,10 @@ namespace Cudimot {
     static cudimotOptions& getInstance();
     ~cudimotOptions() { delete gopt; }
     
-    Option<bool> verbose;
     Option<bool> help;
     Option<string> logdir;
     Option<bool> forcedir;
+    Option<string> priorsfile;
     Option<string> datafile;
     Option<string> maskfile;
     Option<string> subjdir;
@@ -44,16 +44,20 @@ namespace Cudimot {
     Option<int> nburn_noard;
     Option<int> sampleevery;
     Option<int> updateproposalevery;
+    Option<bool> no_updateproposal;
     Option<int> seed;
-    Option<bool> runLevMar;
-    Option<bool> useMarquardt;
+    Option<bool> no_LevMar;
+    Option<bool> no_Marquardt;
     Option<int> iterLevMar;
+    Option<string> gridSearch;
     Option<bool> runMCMC;
-    Option<bool> no_ard;
-    Option<bool> all_ard;
     Option<bool> rician;
+    Option<bool> keepTmp;
+    Option<bool> getPredictedSignal;
     Option<string> CFP;
+    Option<string> FixP;
     Option<string> init_params;
+    Option<string> debug;
     
     void parse_command_line(int argc, char** argv,  Log& logger);
   
@@ -75,95 +79,107 @@ namespace Cudimot {
   }
   
   inline cudimotOptions::cudimotOptions():
-	verbose(string("-V,--verbose"), false,
-		string("switch on diagnostic messages"),
-		false, no_argument),
 	help(string("-h,--help"), false,
-		string("display this message"),
+		string("\tDisplay this message"),
 		false, no_argument),
 	logdir(string("--ld,--logdir"), string("logdir"),
-		string("log directory (default is logdir)"),
+		string("\tLog directory (default is logdir)"),
 		false, requires_argument),
 	forcedir(string("--forcedir"),false,
-		string("Use the actual directory name given - i.e. don't add + to make a new directory"),
+		string("\tUse the actual directory name given - i.e. don't add + to make a new directory"),
 		false,no_argument),
+	priorsfile(string("--priors"), string(""),
+		string("\tFile with parameters information (initialization, bounds and priors)"),
+		true, requires_argument),
 	datafile(string("--data"), string("data"),
-		string("data file"),
+		string("\t\tData file"),
 		true, requires_argument),  
 	maskfile(string("--maskfile"), string("nodif_brain_mask"),
-		string("mask file"),
+		string("\tMask file"),
 		true, requires_argument),
 	subjdir(string("--subjdir"), string(""),
-		string("Subject directory"),
+		string("\tSubject directory"),
 		true, requires_argument),
-	partsdir(string("--partsdir"), string("partsdir"),
-		string("Directory where different parts of the data/temporal-results will be stored"),
+	partsdir(string("--partsdir"), string(""),
+		string("\tDirectory where different parts of the data/results will be stored"),
 		true, requires_argument),
-	outputdir(string("--outputdir"), string("outputdir"),
-		string("Directory where to write the output files"),
+	outputdir(string("--outputdir"), string(""),
+		string("\tDirectory where to write the output files"),
 		true, requires_argument),
 	idPart(string("--idPart"),0,
-		string("Number of the part of the dataset to process [0..N-1]"),
+		string("\tNumber of the part of the dataset to process [0..N-1]"),
 		true, requires_argument),
 	nParts(string("--nParts"),0,
-		string("Total number of parts of the dataset [1..N]"),
+		string("\tTotal number of parts of the dataset [1..N]"),
 		true, requires_argument),
 	fudge(string("--fudge"),1,
-		string("ARD fudge factor"),
+		string("\t\tARD fudge factor"),
 		false,requires_argument),
 	njumps(string("--nj,--njumps"),1250,
-		string("Num of jumps to be made by MCMC (default is 1250)"),
+		string("\tNum of jumps to be made by MCMC (default is 1250)"),
 		false,requires_argument),
-	nburn(string("--bi,--burnin"),5000,
-		string("Total num of jumps at start of MCMC to be discarded (default is 5000)"),
+	nburn(string("--bi,--burnin"),1000,
+		string("\tTotal num of jumps at start of MCMC to be discarded (default is 1000)"),
 		false,requires_argument),
 	nburn_noard(string("--bn,--burnin_noard"),0,
-		string("num of burnin jumps before the ard is imposed (default is 0)"),
+		string("Num of burnin jumps before the ard is imposed (default is 0)"),
 		false,requires_argument),
 	sampleevery(string("--se,--sampleevery"),25,
-		string("Num of jumps for each sample (MCMC) (default is 25)"),
+		string("\tNum of jumps for each sample (MCMC) (default is 25)"),
 		false,requires_argument),
 	updateproposalevery(string("--upe,--updateproposalevery"),40,
 		string("Num of jumps for each update to the proposal density std (MCMC) (default is 40)"),
 		false,requires_argument),
+	no_updateproposal(string("--no_updateproposal"),false,
+		string("Do not update the proposal density std during the recording step of MCMC"),
+		false,no_argument),
 	seed(string("--seed"),8219,
-		string("seed for pseudo random number generator"),
+		string("\t\tSeed for pseudo random number generator"),
 		false,requires_argument),
-	runLevMar(string("--runLevMar"),true,
-		string("Run Levenberg(-Marquardt if activated) algorithm"),
+	no_LevMar(string("--no_LevMar"),false,
+		string("\tDo not run Levenberg-Marquardt algorithm"),
 		false, no_argument),
-	useMarquardt(string("--useMarquardt"),true,
-		string("Use Marquardt contribution in Levenberg algorithm"),
+	no_Marquardt(string("--no_Marquardt"),false,
+		string("\tDo not use Marquardt contribution in Levenberg algorithm"),
 		false, no_argument),
-	iterLevMar(string("iterLevMar"),200,
-		string("Maximum number of iterations in Levenberg(-Marquardt) algorithm (default is 200)"),
+	iterLevMar(string("--iterLevMar"),200,
+		string("\tMaximum number of iterations in Levenberg(-Marquardt) algorithm (default is 200)"),
+		false,requires_argument),
+	gridSearch(string("--gridSearch"),string(""),
+		string("\tRun gridSearch algorithm using the values specified in a file"),
 		false,requires_argument),
    	runMCMC(string("--runMCMC"),false,
-		string("Run MCMC algorithm and get distribution of estimates"),
-		false,no_argument),
-	no_ard(string("--noard"),false,
-		string("Turn ARD off on all fibres"),
-		false,no_argument),
-	all_ard(string("--allard"),false,
-		string("Turn ARD on on all fibres"),
+		string("\tRun MCMC algorithm and get distribution of estimates"),
 		false,no_argument),
 	rician(string("--rician"),false,
-		string("Use Rician noise modelling in MCMC"),
+		string("\tUse Rician noise modelling in MCMC"),
+		false,no_argument),
+        keepTmp(string("--keepTmp"),false,
+		string("\tDo not remove the temporal directory created for storing the data/results parts"),
+		false,no_argument),
+	getPredictedSignal(string("--getPredictedSignal"),false,
+		string("Save the predicted signal by the model at the end"),
 		false,no_argument),
 	CFP(string("--CFP"), string(""),
-		string("File with a list of ASCCI files for specifying the common fixed parameters of the model"),
+		string("\t\tFile with a list of ASCCI files for specifying the common (to all voxels) fixed parameters of the model"),
+		false, requires_argument),  
+	FixP(string("--FixP"), string(""),
+		string("\t\tFile with a list of NIfTI files for specifying the fixed parameters of the model"),
 		false, requires_argument),  
 	init_params(string("--init_params"), string(""),
-		string("File with a list of NIFTI files for the initialization of the model parameters"),
+		string("\tFile with a list of NIfTI files for the initialization of the model parameters"),
+		false, requires_argument),
+        debug(string("--debug"), string(""),
+		string("\t\tSpecify a voxel for debugging. Some variables at certain steps of the algorithms will be printed (use few iterations)"),
 		false, requires_argument),
 
-   options("cudimot","cudimot --help (for list of options)\n")
+   options("CUDIMOT","YourModelName --help (for list of options)\n")
      {
        try {
-	options.add(verbose);
 	options.add(help);
 	options.add(logdir);
 	options.add(forcedir);
+	options.add(priorsfile);
 	options.add(datafile);
 	options.add(maskfile);
 	options.add(subjdir);
@@ -177,16 +193,20 @@ namespace Cudimot {
 	options.add(nburn_noard);
 	options.add(sampleevery);
 	options.add(updateproposalevery);
+	options.add(no_updateproposal);
 	options.add(seed);
+	options.add(gridSearch); 
 	options.add(runMCMC); 
-	options.add(no_ard);
-	options.add(all_ard);
-	options.add(runLevMar);
-	options.add(useMarquardt);
+	options.add(no_LevMar);
+	options.add(no_Marquardt);
 	options.add(iterLevMar);
 	options.add(rician);
+	options.add(keepTmp);
+	options.add(getPredictedSignal);
 	options.add(CFP);
+	options.add(FixP);
 	options.add(init_params);
+	options.add(debug);
      }
      catch(X_OptionError& e) {
        options.usage();

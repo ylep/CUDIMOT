@@ -13,7 +13,8 @@ namespace Cudimot{
   template <typename T>
   Parameters<T>::Parameters(Model<T> model,dMRI_Data<T> dMRI_data):
     nparams(model.nparams),
-    nFP(model.nFP), nCFP(model.nCFP),CFP_Tsize(model.CFP_Tsize),
+    nFixP(model.nFixP), FixP_Tsize(model.FixP_Tsize),
+    nCFP(model.nCFP),CFP_Tsize(model.CFP_Tsize),
     nvox(dMRI_data.nvox), nmeas(dMRI_data.nmeas),nparts(dMRI_data.nparts),
     size_part(dMRI_data.size_part),size_last_part(dMRI_data.size_last_part),
     nvoxFit_part(dMRI_data.nvoxFit_part)
@@ -25,8 +26,11 @@ namespace Cudimot{
     //////////////////////////////////////////////////////
     /// Initialise parameters
     /// The user can provide nifti files for some parameters
-    //////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////    
     params_host=new T[nvox*nparams];
+    if(opts.getPredictedSignal.value()){
+      predSignal_host=new T[nvox*nmeas];
+    }
     
     if (opts.init_params.set()){
       // If volumes provided for initialize parameters
@@ -36,7 +40,7 @@ namespace Cudimot{
 	name_file.append(opts.partsdir.value());
 	name_file.append("/part_");
 	name_file.append(num2str(opts.idPart.value()));
-	name_file.append("/Param_");
+	name_file.append("/ParamInit_");
 	name_file.append(num2str(idParam));
 	
 	ifstream in;
@@ -63,7 +67,7 @@ namespace Cudimot{
       }
       
     }else{
-      // If NOT volumes provided for initialize parameters, try default values
+      // If NOT volumes provided for initialise parameters, try default values
       for(int idParam=0;idParam<nparams;idParam++){
 	for(int i=0;i<nvox;i++){
 	  if(model.initProvided()){
@@ -78,7 +82,6 @@ namespace Cudimot{
     //////////////////////////////////////////////////////
     /// Read Common Fixed Parameters (kxM, M:measurements)
     /// Provided by the user
-    /// If not provided use the defaut values (given by the model-designer)
     //////////////////////////////////////////////////////
     CFP_host= new T[nmeas*CFP_Tsize];
     
@@ -90,17 +93,17 @@ namespace Cudimot{
       if (file.is_open()){
 	string line;
 	while(getline(file,line)){
-       	  if (!line.empty()){ // if is empty, what should I do?
+       	  if (!line.empty()){ // if is empty, ignore the line
 	    // Read file with values
 	    Matrix values;
 	    values=read_ascii_matrix(line);
 	    int param_size = model.CFP_sizes[nCFP_set];
 	    if(values.Nrows()!=param_size){
-	      cerr << "CUDIMOT Error: Common Fixed Parameter number " << nCFP_set << " and file " << line << " do not match the dimensions specified for this model" << endl;
+	      cerr << "CUDIMOT Error: Common Fixed Parameters number " << nCFP_set << " and file " << line << " do not match the dimensions specified for this model" << endl;
 	      exit(-1);
 	    }
 	    if(values.Ncols()!=nmeas){
-	      cerr << "CUDIMOT Error:  Common Fixed Parameter number " << nCFP_set << " and file " << line << " do not match the number of measurements: " << nmeas << endl;
+	      cerr << "CUDIMOT Error:  Common Fixed Parameters number " << nCFP_set << " and file " << line << " do not match the number of measurements: " << nmeas << endl;
 	      exit(-1);
 	    }
 	    
@@ -116,30 +119,95 @@ namespace Cudimot{
 	} //end lines
 	
 	if(nCFP_set!=nCFP){
-	  cerr << "CUDIMOT Error: The number of common fixed parameter provided in file: " << filename.data() << " is not correct for this model. The number of common fixed parameter must be " << nCFP << endl;
+	  cerr << "CUDIMOT Error: The number of Common Fixed Parameters provided in file: " << filename.data() << " is not correct for this model. The number of Common Fixed Parameters must be " << nCFP << endl;
 	  exit(-1);
 	}
       }else{
-	cerr << "CUDIMOT Error: Unable to open Common Fixed Parameters file: " << filename.data() << endl; 
+	cerr << "CUDIMOT Error: Unable to open file with Common Fixed Parameters: " << filename.data() << endl; 
 	exit(-1);
       }
-    
     }else{
-      // No CFP provided ?
-      
+      // No CFP provided 
+      if(CFP_Tsize){
+	cerr << "CUDIMOT Error: The user must provide a file with a list of common fixed parameters for this model: Use option --CFP" << endl;
+	exit(-1);
+      }
     }
+    //////////////////////////////////////////////////////
+    
+
+
+    //////////////////////////////////////////////////////
+    /// Read Fixed Parameters (Nvoxels x M, M:measurements)
+    /// Provided by the user
+    //////////////////////////////////////////////////////
+    FixP_host= new T[nvox*FixP_Tsize];
+    
+    if (opts.FixP.set()){
+      int nFP_set = 0; //to check that all the values are set
+      int cumulativeFP=0;
+
+      for(int FP=0;FP<nFixP;FP++){
+	// Read binary file with values for this part, logfile
+	string name_file;
+	name_file.append(opts.partsdir.value());
+	name_file.append("/part_");
+	name_file.append(num2str(opts.idPart.value()));
+	name_file.append("/FixParam_");
+	name_file.append(num2str(FP));
+
+	ifstream in;
+	long nbytes;
+	int nvox_file,nmeas_file;
+	in.open(name_file.data(), ios::in | ios::binary);
+	in.read((char*)&nvox_file, 4);
+	in.read((char*)&nmeas_file, 4);
+	in.read((char*)&nbytes, sizeof(long));
+	    
+	if(nvox!=nvox_file || nmeas_file!=model.getNFixP_size(nFP_set)){
+	  cerr << "CUDIMOT Error: The amount of data in the intermediate file " <<  name_file << " with Fixed Parameters is not correct" << endl;
+	  exit(-1);
+	}
+	    
+	Matrix FixPars;
+	FixPars.ReSize(nmeas_file,nvox);
+	in.read((char*)&FixPars(1,1),nbytes);
+	in.close();
+	    
+	for (int v=0;v<nvox;v++){
+	  for(int m=0;m<nmeas_file;m++){
+	    FixP_host[v*FixP_Tsize+cumulativeFP+m]=FixPars(m+1,v+1);
+	  }
+	}
+	    
+	nFP_set++;
+	cumulativeFP+=nmeas_file;
+	    
+      }	
+    }else{
+      // No FP provided 
+      if(FixP_Tsize){
+	cerr << "CUDIMOT Error: The user must provide a file with a list of Fixed Parameters for this model: Use option --FixP" << endl;
+	exit(-1);
+      }
+    }
+    //////////////////////////////////////////////////////
     //////////////////////////////////////////////////////
     
         
     /// Allocate GPU memory
     cudaMalloc((void**)&params_gpu,nvoxFit_part*nparams*sizeof(T));
     cudaMalloc((void**)&CFP_gpu,CFP_Tsize*nmeas*sizeof(T));
+    cudaMalloc((void**)&FixP_gpu,nvoxFit_part*FixP_Tsize*sizeof(T));
+    if(opts.getPredictedSignal.value()){
+      cudaMalloc((void**)&predSignal_gpu,nvoxFit_part*nmeas*sizeof(T));
+    }
     sync_check("Allocating Model Parameters on GPU\n");
     
-    // Copy Parameters from host to GPU
+    // Copy Fixed Common Parameters from host to GPU
     cudaMemcpy(CFP_gpu,CFP_host,CFP_Tsize*nmeas*sizeof(T),cudaMemcpyHostToDevice);
     sync_check("Copying Common-Fixed Model Parameters to GPU\n");
-    
+        
     /// If MCMC: allocate memory in host and GPU for samples;
     if(opts.runMCMC.value()){
       nsamples=(opts.njumps.value()/opts.sampleevery.value());   
@@ -148,6 +216,11 @@ namespace Cudimot{
     }
     samples_host = new T[nsamples*nparams*nvox];
     cudaMalloc((void**)&samples_gpu,nvoxFit_part*nparams*nsamples*sizeof(T));
+    if(opts.rician.value()){
+      tau_samples_host=new T[nsamples*nvox];
+      cudaMalloc((void**)&tau_samples_gpu,nvoxFit_part*nsamples*sizeof(T));
+    }
+    sync_check("Allocating Samples on GPU\n");
   }
   
   template <typename T>
@@ -161,8 +234,11 @@ namespace Cudimot{
     }
     
     int initial_pos=part*size_part*nparams;
+    int size=size_part;
+    if(part==(nparts-1)) 
+      size=size_last_part; // last part
     // Copy from host to GPU
-    cudaMemcpy(params_gpu,&params_host[initial_pos],nvoxFit_part*nparams*sizeof(T),cudaMemcpyHostToDevice);
+    cudaMemcpy(params_gpu,&params_host[initial_pos],size*nparams*sizeof(T),cudaMemcpyHostToDevice);
     sync_check("Copying Model Parameters to GPU\n");
 
     return params_gpu;
@@ -177,14 +253,34 @@ namespace Cudimot{
   int Parameters<T>::getTsize_CFP(){
     return CFP_Tsize;
   }
+ 
+  template <typename T>
+  int Parameters<T>::getTsize_FixP(){
+    return FixP_Tsize;
+  }
   
   template <typename T>
   T* Parameters<T>::getCFP(){
     return CFP_gpu;
   }
+
+  template <typename T>
+  T* Parameters<T>::getFixP_part(int part){
+    if(part>=nparts){
+      cerr << "CUDIMOT Error: Trying to get an incorrect part of the Fixed Parameters: " << part << ". There are only " << nparts << " parts and index starts at 0." << endl;
+      exit(-1);
+    }
+    int initial_pos=part*size_part*FixP_Tsize;
+     // Copy Fixed Parameters from host to GPU
+    cudaMemcpy(FixP_gpu,&FixP_host[initial_pos],FixP_Tsize*nvoxFit_part*sizeof(T),cudaMemcpyHostToDevice);
+    sync_check("Copying Fixed Model Parameters to GPU\n");
+    return FixP_gpu;
+  }
   
   template <typename T>
   void Parameters<T>::copyParamsPartGPU2Host(int part){
+
+    cudimotOptions& opts = cudimotOptions::getInstance();
 
     if(part>=nparts){
       cerr << "CUDIMOT Error: Trying to store an incorrect part of Parameters: " << part << ". There are only " << nparts << " parts and index starts at 0." << endl;
@@ -198,9 +294,16 @@ namespace Cudimot{
     int initial_pos=part*size_part*nparams;
     
     cudaMemcpy(&params_host[initial_pos],params_gpu,size*nparams*sizeof(T),cudaMemcpyDeviceToHost);
-     sync_check("Copying Model Parameters from GPU\n");
-     
-     samples_host=params_host; 
+    sync_check("Copying Model Parameters from GPU\n");
+
+    if(opts.getPredictedSignal.value()){
+      // Calculate Predicted Signal of this part
+      PredictedSignal.run(nvoxFit_part,nmeas,CFP_Tsize,FixP_Tsize,params_gpu,CFP_gpu,getFixP_part(part),predSignal_gpu);
+      // Copy Predicted Signal to host
+      initial_pos=part*size_part*nmeas;
+      cudaMemcpy(&predSignal_host[initial_pos],predSignal_gpu,size*nmeas*sizeof(T),cudaMemcpyDeviceToHost);
+      sync_check("Copying Predicted Signal from GPU\n");
+    }
   }
   
   template <typename T>
@@ -211,6 +314,7 @@ namespace Cudimot{
   
   template <typename T>
   void Parameters<T>::copySamplesPartGPU2Host(int part){
+    cudimotOptions& opts = cudimotOptions::getInstance();
     if(part>=nparts){
       cerr << "CUDIMOT Error: Trying to store an incorrect part of Samples: " << part << ". There are only " << nparts << " parts and index starts at 0." << endl;
       exit(-1);
@@ -224,6 +328,12 @@ namespace Cudimot{
     
     cudaMemcpy(&samples_host[initial_pos],samples_gpu,size*nparams*nsamples*sizeof(T),cudaMemcpyDeviceToHost);
     sync_check("Copying Samples from GPU\n");
+
+    if(opts.rician.value()){
+      initial_pos=part*size_part*nsamples;
+      cudaMemcpy(&tau_samples_host[initial_pos],tau_samples_gpu,size*nsamples*sizeof(T),cudaMemcpyDeviceToHost);
+      sync_check("Copying Tau Samples from GPU\n");
+    }
   }
   
   template <typename T>
@@ -264,6 +374,61 @@ namespace Cudimot{
       out.write((char*)&samples[par](1,1),size);
       out.close();
     }
+
+    if(opts.getPredictedSignal.value()){
+      Matrix PredSignalM;
+      PredSignalM.ReSize(nmeas,nvox);
+      PredSignalM=0;
+      for(int vox=0;vox<nvox;vox++){  
+	for(int mea=0;mea<nmeas;mea++){
+	  PredSignalM(mea+1,vox+1)=predSignal_host[vox*nmeas+mea];
+	}
+      }
+      string file_name;
+      file_name.append(opts.partsdir.value());
+      file_name.append("/part_");
+      file_name.append(num2str(opts.idPart.value()));
+      file_name.append("/PredictedSignal");
+      ofstream out;
+      out.open(file_name.data(), ios::out | ios::binary);
+      out.write((char*)&nvox,4); // number of voxels
+      out.write((char*)&nmeas,4); // number of measurements
+      long size=nvox*nmeas*sizeof(Real); //need Real here (NEWMAT Object!)
+      out.write((char*)&size,sizeof(long)); // number of bytes
+      out.write((char*)&PredSignalM(1,1),size);
+      out.close();
+    }
+
+    // Rician Noise: Write tau samples
+    if(opts.rician.value()){
+      Matrix tau_samples;
+      tau_samples.ReSize(nsamples,nvox);
+      tau_samples=0;
+      for(int vox=0;vox<nvox;vox++){  
+	for(int sam=0;sam<nsamples;sam++){
+	  tau_samples(sam+1,vox+1)=tau_samples_host[vox*nsamples+sam];
+	}
+      }
+      string file_name;
+      file_name.append(opts.partsdir.value());
+      file_name.append("/part_");
+      file_name.append(num2str(opts.idPart.value()));
+      file_name.append("/Tau_samples");
+      ofstream out;
+      out.open(file_name.data(), ios::out | ios::binary);
+      out.write((char*)&nvox,4); // number of voxels
+      out.write((char*)&nsamples,4); // number of measurements
+      long size=nvox*nsamples*sizeof(Real); //need Real here (NEWMAT Object!)
+      out.write((char*)&size,sizeof(long)); // number of bytes
+      out.write((char*)&tau_samples(1,1),size);
+      out.close();
+    }
+    
+  }
+
+  template <typename T>
+  T* Parameters<T>::getTauSamples(){
+    return tau_samples_gpu;
   }
   
   // Explicit Instantiations of the template

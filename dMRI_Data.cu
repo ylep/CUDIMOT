@@ -126,7 +126,7 @@ namespace Cudimot{
       size=size_last_part;
     }
     
-    cout << "Part " << part+1 << " of " << nparts << ": processing " << size << " voxels" << endl;
+    cout << endl << endl << endl << "Part " << part+1 << " of " << nparts << ": processing " << size << " voxels" << endl;
 
     int vox=0;
     for(vox=0;vox<size;vox++){

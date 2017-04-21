@@ -7,15 +7,16 @@
 /*  CCOPYRIGHT  */
 
 #include <sys/stat.h>
+#include "boost/filesystem.hpp"
 #include "newmat.h"
 #include "newimage/newimageall.h"
 #include "compileOptions/type.h"
 #include "cudimotoptions.h"
+#include "dMRI_Data.h"
 #include "Model.h"
-
-
+    
 using namespace Cudimot;
-
+using namespace boost::filesystem;
 
 void join_Parts(NEWIMAGE::volume<MyType> mask, string directory_in, string name_in, string name_out, int nsamples, int nParts, float max, float min){
     
@@ -36,6 +37,11 @@ void join_Parts(NEWIMAGE::volume<MyType> mask, string directory_in, string name_
     in.open(file_name.data(), ios::in | ios::binary);
     in.read((char*)&nvox_file, 4);
     in.read((char*)&nsamples_file, 4);
+    if(nsamples==-1){
+      // Do not know id advance the number od data measurements
+      nsamples=nsamples_file;
+      result.ReSize(nsamples,0);
+    }
     in.read((char*)&nbytes_file, sizeof(long));
     if(nvox_file<=0 || nsamples_file<=0 || nsamples_file!=nsamples ){
       cerr << "CUDIMOT Error: The amount of data in the intermediate output file: " << file_name.data() << " is not correct." << endl;
@@ -46,7 +52,6 @@ void join_Parts(NEWIMAGE::volume<MyType> mask, string directory_in, string name_
     in.close();
     result |= part;
   }
-  
   NEWIMAGE::volume4D<MyType> tmp;
   tmp.setmatrix(result,mask);
   if(max==-10) max=tmp.max();
@@ -65,7 +70,7 @@ int main(int argc, char *argv[])
   Log& logger = LogSingleton::getInstance();
   cudimotOptions& opts = cudimotOptions::getInstance();
   opts.parse_command_line(argc,argv,logger);
-  
+
   NEWIMAGE::volume<MyType> mask;
   read_volume(mask,opts.maskfile.value());
   
@@ -96,6 +101,31 @@ int main(int argc, char *argv[])
             
     join_Parts(mask,path_in,file_name,output_file,nsamples,opts.nParts.value(),-10,-10);
   }
+
+  // If getPredictedSignal, join the different parts
+  if(opts.getPredictedSignal.value()){
+    string file_name = "PredictedSignal";
+    std::string output_file=path_out+"/"+file_name;
+    
+    // it does not know the number of measurements. Set to -1 and it will get the number from the first part
+    join_Parts(mask,path_in,file_name,output_file,-1,opts.nParts.value(),-10,-10);
+  }
+
+  // If Rician Noise, join tau samples
+  if(opts.rician.value()&&opts.runMCMC.value()){
+    string file_name = "Tau_samples";
+    std::string output_file=path_out+"/"+file_name;
+    
+    join_Parts(mask,path_in,file_name,output_file,nsamples,opts.nParts.value(),-10,-10);
+  }
+
+  // Delete the temporal files
+  if(!opts.keepTmp.value()){
+    string path_remove;
+    remove_all(opts.partsdir.value());
+  }
+
+
   return 0;
 }
 

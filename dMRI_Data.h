@@ -22,7 +22,7 @@
 #include <vector>
 #include "newmat.h"
 #include "newimage/newimageall.h"
-#include "utils.h"
+#include "checkcudacalls.h"
 #include "compileOptions/grid.h"
 #include "cudimotoptions.h"
 
