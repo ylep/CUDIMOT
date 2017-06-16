@@ -27,7 +27,7 @@ chmod 755 $scriptFile
 
 # No text file with info about the model
 #outDIR=`cat Makefile | grep DIR_objs= | cut -f 2 -d "="`
-infoFile=$FSLDEVDIR/bin/$modelname"@info"
+infoFile=$FSLDEVDIR/bin/$modelname".info"
 
 echo > $infoFile
 echo "---------------------------------------------" >> $infoFile

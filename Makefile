@@ -69,8 +69,11 @@ debugging:
 	rm -f $(DIR_objs)/MCMC.o
 	rm -f $(DIR_objs)/GridSearch.o
 	make install
+makedir:
+	mkdir -p $(FSLDEVDIR)/bin
+	mkdir -p $(DIR_objs)
 
-all: 	cleanall ${XFILES}
+all: 	cleanall makedir ${XFILES}
 
 $(DIR_objs)/cart2spherical: 
 	${CXX} ${CXXFLAGS} ${LDFLAGS} -o $@ utils/cart2spherical.cc ${DLIBS} 
