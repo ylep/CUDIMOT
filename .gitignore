@@ -11,7 +11,8 @@
 !*.sh
 !modelpriors
 !Makefile
-
+!*.c
+!*.h
 
 
 ## Temporary files
