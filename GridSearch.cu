@@ -9,6 +9,7 @@
 #include "GridSearch.h"
 #include "functions_gpu.h"
 #include "modelparameters.h"
+#include "macro_numerical.h"
 #include "modelfunctions.h"
 
 namespace Cudimot{
@@ -171,7 +172,10 @@ namespace Cudimot{
     __syncthreads();
     ///////////////////////////////////////////
     
-    Cost_Function<T,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,CFP,FixP,pcf,debugVOX);
+    //Cost_Function<T,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,CFP,FixP,pcf,debugVOX);
+    if(leader){
+      *pcf=9e20;
+    }
     if(DEBUG){
       if(idVOX==debugVOX&&leader){
 	printf("--------------------------------------------------------\n");  
@@ -289,7 +293,7 @@ namespace Cudimot{
 			  T* meas, T* params,
 			  T* CFP, T* FixP) 
   {
-    
+  
     long int amount_shared_mem = 0;
     amount_shared_mem += 2*VOXELS_BLOCK*sizeof(double); // cost function
     amount_shared_mem += (nmeas*CFP_size)*sizeof(T); // CFP

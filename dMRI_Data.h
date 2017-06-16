@@ -23,7 +23,7 @@
 #include "newmat.h"
 #include "newimage/newimageall.h"
 #include "checkcudacalls.h"
-#include "compileOptions/grid.h"
+#include "gridOptions.h"
 #include "cudimotoptions.h"
 
 namespace Cudimot{

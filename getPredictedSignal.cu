@@ -11,6 +11,7 @@
 #include "getPredictedSignal.h"
 #include "functions_gpu.h"
 #include "modelparameters.h"
+#include "macro_numerical.h"
 #include "modelfunctions.h"
 
 namespace Cudimot{
@@ -21,9 +22,10 @@ namespace Cudimot{
   __global__ void getPredictedSignal_kernel(
 					    int nvox, // nvoxels
 					    int nmeas, // nmeasurements
+					    int nsamples,
 					    int CFP_Tsize, //size*M-measurements
 					    int FixP_Tsize, // fixed params: size*N-voxels
-					    T* parameters, // model parameters 
+					    T* samples, // samples of estimated parameters 
 					    T* CFP_global, // common fixed model parameters
 					    T* FixP, // fixed model parameters
 					    T* PredictedSignal)
@@ -37,9 +39,8 @@ namespace Cudimot{
     
     ////////// DYNAMIC SHARED MEMORY ///////////
     extern __shared__ double shared[];	      	//Size:
-    
     T* CFP = (T*)shared;		 	//nmeas*CMP_Tsize
-    T* params = (T*) &CFP[nmeas*CFP_Tsize]; 	//NPARAMS*VOXELS_BLOCK
+    T* meanSamples = (T*) &CFP[nmeas*CFP_Tsize];//NPARAMS*VOXELS_BLOCK
     ////////////////////////////////////////////
     
     /// Copy common fixed model parameters to Shared Memory ///
@@ -52,29 +53,38 @@ namespace Cudimot{
     ///////////////////////////////////////////////////////////
     
     ///////// each voxel/warp of the block points to its data///////////
-    params = &params[idVOX_inBlock*NPARAMS];
+    samples = &samples[idVOX*NPARAMS*nsamples]; // Global
+    meanSamples = &meanSamples[idVOX_inBlock*NPARAMS];
     PredictedSignal = &PredictedSignal[idVOX*nmeas]; //Global
     FixP = &FixP[idVOX*FixP_Tsize]; // Global memory
     ////////////////////////////////////////////////////////////////////
 
     /// Ititialise shared values of each voxel: only the leader///
-    if(leader){ 
-      #pragma unroll
-      for(int par=0;par<NPARAMS;par++){
-	params[par]=parameters[idVOX*NPARAMS+par];
+    if(leader){
+      if(nsamples>1){
+	for(int par=0;par<NPARAMS;par++){
+	  T value=0;
+	  for(int samp=0;samp<nsamples;samp++){
+	    value+= samples[par*nsamples+samp];
+	  }
+	  meanSamples[par]=value/nsamples;
+	}
+      }else{
+        #pragma unroll
+	for(int par=0;par<NPARAMS;par++){
+	  meanSamples[par]=samples[par];
+	}
       }
     }
     __syncthreads();
-    //sync?   
 
-        
     int idMeasurement=idSubVOX;
     int nmeas2compute = nmeas/THREADS_VOXEL;
     if (idSubVOX<(nmeas%THREADS_VOXEL)) nmeas2compute++;
     
     for(int iter=0;iter<nmeas2compute;iter++){
       T* myCFP = &CFP[idMeasurement*CFP_Tsize];
-      T pred=Predicted_Signal(NPARAMS,params,myCFP,FixP);
+      T pred=Predicted_Signal(NPARAMS,meanSamples,myCFP,FixP);
       PredictedSignal[idMeasurement]=pred;
       idMeasurement+=THREADS_VOXEL;
     }
@@ -86,15 +96,15 @@ namespace Cudimot{
   
   template <typename T>
   void getPredictedSignal<T>::run(
-				   int nvox, int nmeas,
-				   int CFP_size, int FixP_size,
-				   T* params, T* CFP, T* FixP,
-				   T* PredictedSignal) 
+				  int nvox, int nmeas, int nsamples,
+				  int CFP_size, int FixP_size,
+				  T* samples, T* CFP, T* FixP,
+				  T* PredictedSignal) 
   {
     
     long int amount_shared_mem = 0;
     amount_shared_mem += (nmeas*CFP_size)*sizeof(T); // CFP
-    amount_shared_mem += (NPARAMS*VOXELS_BLOCK)*sizeof(T); // Parameters
+    amount_shared_mem += (NPARAMS*VOXELS_BLOCK)*sizeof(T); //mean_samples
     
     cout << "Shared Memory used in PredictedSignal kernel: " << amount_shared_mem << endl;
     
@@ -102,7 +112,7 @@ namespace Cudimot{
     int nblocks=(nvox/VOXELS_BLOCK);
     if(nvox%VOXELS_BLOCK) nblocks++;
     
-    getPredictedSignal_kernel<T><<<nblocks,threads_block,amount_shared_mem>>>(nvox,nmeas,CFP_size,FixP_size,params,CFP,FixP,PredictedSignal);
+    getPredictedSignal_kernel<T><<<nblocks,threads_block,amount_shared_mem>>>(nvox,nmeas,nsamples,CFP_size,FixP_size,samples,CFP,FixP,PredictedSignal);
     sync_check("getPredictedSignal Kernel");
   }
   

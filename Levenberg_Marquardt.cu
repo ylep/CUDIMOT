@@ -9,6 +9,7 @@
 #include "Levenberg_Marquardt.h"
 #include "functions_gpu.h"
 #include "modelparameters.h"
+#include "macro_numerical.h"
 #include "modelfunctions.h"
 
 namespace Cudimot{
@@ -20,11 +21,12 @@ namespace Cudimot{
 #define EPS_gpu 2.0e-16 //Losely based on NRinC 20.1
 #define TwoDivPI 0.636619772367581
 #define PIDivTwo 1.5707962 // 1.57079632679
-#define avoidErrors 1e-6 // Avoid maximum and minimums because tan(pi/2) is undefined to inf
+#define avoidErrors 1e-4 // Avoid maximum and minimums because tan(pi/2) is undefined to inf
   
   __constant__ int LMbound_types [NPARAMS];
   __constant__ float LMbounds_min [NPARAMS];
   __constant__ float LMbounds_max [NPARAMS];
+  __constant__ int LMfixed [NPARAMS];
   
   __device__ inline bool zero_cf_diff_conv(double* cfold, double* cfnew){
     return(2.0*fabs(*cfold-*cfnew) <= CFTOL*(fabs(*cfold)+fabs(*cfnew)+EPS_gpu));
@@ -32,35 +34,14 @@ namespace Cudimot{
 
   template <typename T>
   __device__ inline void MinMaxInvTransform(int idpar, T* params, T* transfParams){
-    //if(threadIdx.x==0) printf("ORIG  %.20f \n",params[idpar]);
 
     if(params[idpar]<=((T)LMbounds_min[idpar]+(T)avoidErrors)) params[idpar]+=(T)avoidErrors;
     if(params[idpar]>=((T)LMbounds_max[idpar]-(T)avoidErrors)) params[idpar]-=(T)avoidErrors;
     // Avoid maximum and minimum because tan(pi/2) is undefined to inf
 
-    //if(threadIdx.x==0) printf("corrected  %.20f \n",params[idpar]);
-    
     transfParams[idpar] = params[idpar]-(((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
     transfParams[idpar] *= ((T)2.0/(((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])*(T)TwoDivPI));
-    
-    //if(threadIdx.x==0) printf("before TAN  %.20f \n",transfParams[idpar]);
-
-    //if(transfParams[idpar]>(T)PIDivTwo){
-    //  transfParams[idpar]=(T)PIDivTwo; // if > pi/2 single precision issues
-    //}
-    //if(transfParams[idpar]<(T)(-PIDivTwo)){
-    //  transfParams[idpar]=(T)(-PIDivTwo); // if < -pi/2 single precision issues
-    //}
-    //if(threadIdx.x==0) printf("before TAN 2 %.20f \n",transfParams[idpar]);
-    
     transfParams[idpar] = tan_gpu(transfParams[idpar]);
-
-    //T agg  = (((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])/(T)2.0);
-    // agg *= atan_gpu(transfParams[idpar]);
-    // agg *=  (T)TwoDivPI;
-    // agg += (((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
-
-    //if(threadIdx.x==0) printf("transform %f into %f and reverse %f \n",params[idpar],transfParams[idpar],agg);
   }
   
   template <typename T>
@@ -147,8 +128,6 @@ namespace Cudimot{
 	derivatives[p]=derivatives[p]*((LMbounds_max[p]-LMbounds_min[p])/(T)2.0)*((T)1.0/((T)1.0+(transfParams[p]*transfParams[p])))*(T)TwoDivPI;
       }
       //else keep the same
-
-      //if(threadIdx.x==0) printf("Output derivative %.20f from transPara %f\n",derivatives[p],transfParams[p]);
     }
   }
   
@@ -263,6 +242,9 @@ namespace Cudimot{
         #pragma unroll
 	for(int p=0;p<NPARAMS;p++){
 	  Gradient[p]+=myderivatives[p];
+	  if(LMfixed[p]){
+	    Gradient[p]=0;
+	  }
 	}
       }
       idMeasurement+=THREADS_VOXEL;
@@ -328,7 +310,19 @@ namespace Cudimot{
 	}
       }
       idMeasurement+=THREADS_VOXEL;
-    }  
+    }
+    if(idSubVOX==0){
+      #pragma unroll
+      for(int p=0;p<NPARAMS;p++){
+	#pragma unroll
+	for(int p2=0;p2<NPARAMS;p2++){
+	  if(LMfixed[p] || LMfixed[p2]){
+	    if(p==p2) Hessian[p*NPARAMS+p2]=(T)1.0;
+	    else Hessian[p*NPARAMS+p2]=(T)0.0;
+	  }
+	}
+      }
+    }
   }
   
   // Hessian * X  =  Gradient -> Calculate X
@@ -626,7 +620,8 @@ namespace Cudimot{
   template <typename T>
   Levenberg_Marquardt<T>::Levenberg_Marquardt(vector<int> bou_types, 
 					      vector<T> bou_min, 
-					      vector<T> bou_max)
+					      vector<T> bou_max,
+					      vector<int> fix)
   {
     cudimotOptions& opts = cudimotOptions::getInstance();
     max_iterations=opts.iterLevMar.value();
@@ -648,11 +643,17 @@ namespace Cudimot{
       bounds_min_host[p]=bou_min[p];
       bounds_max_host[p]=bou_max[p];
     }
-    
+
+    fixed_host = new int[NPARAMS];
+    for(int p=0;p<NPARAMS;p++){
+       fixed_host[p]=fix[p];
+    }
+
     cudaMemcpyToSymbol(LMbound_types,bound_types_host,NPARAMS*sizeof(int));
     cudaMemcpyToSymbol(LMbounds_min,bounds_min_host,NPARAMS*sizeof(float));
     cudaMemcpyToSymbol(LMbounds_max,bounds_max_host,NPARAMS*sizeof(float));
-    sync_check("Levenberg_Marquardt: Setting Bounds");
+    cudaMemcpyToSymbol(LMfixed,fixed_host,NPARAMS*sizeof(int));
+    sync_check("Levenberg_Marquardt: Setting Bounds - Fixed");
   }
   
   template <typename T>

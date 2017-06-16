@@ -31,6 +31,7 @@
 #include "Model.h"
 #include "dMRI_Data.h"
 #include "getPredictedSignal.h"
+#include "BIC_AIC.h"
 #include "modelparameters.h"
 
 namespace Cudimot{
@@ -169,6 +170,32 @@ namespace Cudimot{
      * Class with the method to get the Predicted Signal by the model (on the gpu)
      */
     getPredictedSignal<T> PredictedSignal;
+
+    /**
+     * Bayesian information criterion (on the host)
+     */
+    T* BIC_host;
+
+    /**
+     * Bayesian information criterion (on the gpu)
+     */
+    T* BIC_gpu;
+
+    /**
+     * Class with the method to get the Bayesian & Akaike information criteria (on the gpu)
+     */
+    BIC_AIC<T> bic_aic;
+
+    /**
+     * Bayesian information criterion (on the host)
+     */
+    T* AIC_host;
+
+    /**
+     * Bayesian information criterion (on the gpu)
+     */
+    T* AIC_gpu;
+
    
     /**
      * Tau. If rician noise, tau is is 1/sigma with sigma the scale parameter. Values for each voxel/sample on the host.
@@ -228,7 +255,6 @@ namespace Cudimot{
     
     /**
      * Copies the value of the estimated parameters of a part from GPU to the host array with all the parameter values (at its correct position). 
-     * If getPredictedSignal, the method calculate the predicted signal for this part.
      * @param part A number to identify a part of the data
      */
     void copyParamsPartGPU2Host(int part);
@@ -245,7 +271,7 @@ namespace Cudimot{
     void copySamplesPartGPU2Host(int part);
 
     /**
-     * Writes to a binary file the samples of the parameters
+     * Writes to a binary file the samples of the parameters, Including tau (rician noise), the predicted signal, the BIC and AIC if requested.
      */
     void writeSamples();
 
@@ -253,6 +279,14 @@ namespace Cudimot{
      * @return A pointer to the tau parameter samples of each voxel (on the GPU)
      */ 
     T* getTauSamples();
+
+    /**
+     * If the user ask for the predicted signal or BIC/AIC, calculates the predicted signal or/and the BIC/AIC for this part.
+     * @param mode 0: from GridSearch or LevMar (1 sample), from MCMC (several samples, needs to calculate the mean)
+     * @param part A number to identify a part of the data
+     * @param meas Pointer to Data measurements on the GPU
+     */
+    void calculate_predictedSignal_BIC_AIC(int mode, int part,T* meas);
   };
 }
 

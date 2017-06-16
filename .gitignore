@@ -1,3 +1,19 @@
+##Ignore all
+*
+
+##Unignore Directories
+!/**/
+!/**/
+
+##Un-ignore Anything with extension
+!*.cc
+!*.cu
+!*.sh
+!modelpriors
+!Makefile
+
+
+
 ## Temporary files
 *.DS_Store
 *.DS_Store?
@@ -26,9 +42,11 @@
 *CVS*
 *doc*
 *refdoc*
+*user*
 
 
 ## others
+*objs*
 command.*
 depend.mk
 dtimodel

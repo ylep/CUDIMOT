@@ -9,7 +9,6 @@
 #include <sys/stat.h>
 #include "boost/filesystem.hpp"
 #include "newimage/newimageall.h"
-#include "compileOptions/type.h"
 #include "cudimotoptions.h"
 #include "Model.h"
 
@@ -98,7 +97,15 @@ int main(int argc, char *argv[]){
   /// The user can provide nifti files for some parameters
   /// Divide into different parts
   //////////////////////////////////////////////////////
-  Model<MyType> model;
+  char buf[1024]; // get path of this binary to get the priors file
+  ssize_t count = readlink("/proc/self/exe",buf,sizeof(buf)-1);
+  string bin_path(buf,(count > 0) ? count : 0 );
+  string default_priors_file(bin_path.substr(0,bin_path.find_last_of("\\/")));
+  string pattern("split_parts_");
+  default_priors_file+=("/"+bin_path.substr(bin_path.find(pattern)+pattern.size())+"_priors");
+  
+  Model<MyType> model(default_priors_file);
+
   int nparams=model.getNparams();
   if (opts.init_params.set()){
     string filename(opts.init_params.value());

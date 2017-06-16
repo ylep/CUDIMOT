@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-models=`ls mymodels`
+models=`ls mymodels -I utils`
 for m in $models; do
     echo
     echo ------------------------------
@@ -8,6 +8,6 @@ for m in $models; do
     echo ------------------------------
     echo
     export modelname=$m
-    make clean
+    make cleanall
     make install
 done

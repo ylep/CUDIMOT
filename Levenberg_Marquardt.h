@@ -18,7 +18,7 @@
 /* CCOPYRIGHT */
 
 #include <vector>
-#include "compileOptions/grid.h"
+#include "gridOptions.h"
 #include "cudimot.h"
 #include "checkcudacalls.h"
 #include "cudimotoptions.h"
@@ -57,6 +57,11 @@ namespace Cudimot{
     float* bounds_max_host;
 
     /**
+     * 0: Parameter non fixed, 1: Parameter fixed
+     */
+    int* fixed_host;
+
+    /**
      * Activate debugging messages for a voxel. It prints the value of some variables at certain steps of Levenberg_Marquardt (Parameters, PredictedSignal, Derivatives, Gradient, Proposed Parameters)
      */
     bool DEBUG;
@@ -73,8 +78,9 @@ namespace Cudimot{
      * @param bound_types Vector with the type of each bound type
      * @param bounds_min Vector with the lower bound of each parameter
      * @param bounds_max Vector with the upper bound of each parameter
+     * @param fixed Vector with information to know if parameters are fixed
      */
-    Levenberg_Marquardt(vector<int> bound_types, vector<T> bounds_min, vector<T> bounds_max);
+    Levenberg_Marquardt(vector<int> bound_types, vector<T> bounds_min, vector<T> bounds_max,vector<int> fixed);
 
     /**
      * Run Levenberg-Marquard on the GPU

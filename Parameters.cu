@@ -17,7 +17,7 @@ namespace Cudimot{
     nCFP(model.nCFP),CFP_Tsize(model.CFP_Tsize),
     nvox(dMRI_data.nvox), nmeas(dMRI_data.nmeas),nparts(dMRI_data.nparts),
     size_part(dMRI_data.size_part),size_last_part(dMRI_data.size_last_part),
-    nvoxFit_part(dMRI_data.nvoxFit_part)
+    nvoxFit_part(dMRI_data.nvoxFit_part),bic_aic(dMRI_data.nvoxFit_part)
   {
     
     Log& logger = LogSingleton::getInstance();
@@ -30,6 +30,10 @@ namespace Cudimot{
     params_host=new T[nvox*nparams];
     if(opts.getPredictedSignal.value()){
       predSignal_host=new T[nvox*nmeas];
+    }
+    if(opts.BIC_AIC.value()){
+      BIC_host=new T[nvox];
+      AIC_host=new T[nvox];
     }
     
     if (opts.init_params.set()){
@@ -194,13 +198,16 @@ namespace Cudimot{
     //////////////////////////////////////////////////////
     //////////////////////////////////////////////////////
     
-        
     /// Allocate GPU memory
     cudaMalloc((void**)&params_gpu,nvoxFit_part*nparams*sizeof(T));
     cudaMalloc((void**)&CFP_gpu,CFP_Tsize*nmeas*sizeof(T));
     cudaMalloc((void**)&FixP_gpu,nvoxFit_part*FixP_Tsize*sizeof(T));
     if(opts.getPredictedSignal.value()){
       cudaMalloc((void**)&predSignal_gpu,nvoxFit_part*nmeas*sizeof(T));
+    }
+    if(opts.BIC_AIC.value()){
+      cudaMalloc((void**)&BIC_gpu,nvoxFit_part*sizeof(T));
+      cudaMalloc((void**)&AIC_gpu,nvoxFit_part*sizeof(T));
     }
     sync_check("Allocating Model Parameters on GPU\n");
     
@@ -266,20 +273,24 @@ namespace Cudimot{
 
   template <typename T>
   T* Parameters<T>::getFixP_part(int part){
+
     if(part>=nparts){
       cerr << "CUDIMOT Error: Trying to get an incorrect part of the Fixed Parameters: " << part << ". There are only " << nparts << " parts and index starts at 0." << endl;
       exit(-1);
     }
     int initial_pos=part*size_part*FixP_Tsize;
-     // Copy Fixed Parameters from host to GPU
-    cudaMemcpy(FixP_gpu,&FixP_host[initial_pos],FixP_Tsize*nvoxFit_part*sizeof(T),cudaMemcpyHostToDevice);
+    int size=size_part;
+    if(part==(nparts-1)) 
+      size=size_last_part; // last part
+
+    // Copy Fixed Parameters from host to GPU
+    cudaMemcpy(FixP_gpu,&FixP_host[initial_pos],size*FixP_Tsize*sizeof(T),cudaMemcpyHostToDevice);
     sync_check("Copying Fixed Model Parameters to GPU\n");
     return FixP_gpu;
   }
   
   template <typename T>
   void Parameters<T>::copyParamsPartGPU2Host(int part){
-
     cudimotOptions& opts = cudimotOptions::getInstance();
 
     if(part>=nparts){
@@ -295,23 +306,54 @@ namespace Cudimot{
     
     cudaMemcpy(&params_host[initial_pos],params_gpu,size*nparams*sizeof(T),cudaMemcpyDeviceToHost);
     sync_check("Copying Model Parameters from GPU\n");
-
-    if(opts.getPredictedSignal.value()){
-      // Calculate Predicted Signal of this part
-      PredictedSignal.run(nvoxFit_part,nmeas,CFP_Tsize,FixP_Tsize,params_gpu,CFP_gpu,getFixP_part(part),predSignal_gpu);
-      // Copy Predicted Signal to host
-      initial_pos=part*size_part*nmeas;
-      cudaMemcpy(&predSignal_host[initial_pos],predSignal_gpu,size*nmeas*sizeof(T),cudaMemcpyDeviceToHost);
-      sync_check("Copying Predicted Signal from GPU\n");
-    }
   }
   
   template <typename T>
   void Parameters<T>::copyParams2Samples(){
     samples_host=params_host;
   }
-  
-  
+
+  template <typename T>
+  void Parameters<T>:: calculate_predictedSignal_BIC_AIC(int mode, int part, T* meas){
+    cudimotOptions& opts = cudimotOptions::getInstance();
+    int initial_pos;
+    int size=size_part; // this ignores the extra voxels added
+    if(part==(nparts-1)){
+      size=size_last_part; // this ignores the extra voxels added
+    }
+
+    if(opts.getPredictedSignal.value()){
+      if(mode==0){
+	// Calculate Predicted Signal of this part from parameters
+	PredictedSignal.run(nvoxFit_part,nmeas,1,CFP_Tsize,FixP_Tsize,params_gpu,CFP_gpu,getFixP_part(part),predSignal_gpu);
+      }else{
+	// Calculate Predicted Signal of this part from samples (MCMC)
+	PredictedSignal.run(nvoxFit_part,nmeas,nsamples,CFP_Tsize,FixP_Tsize,samples_gpu,CFP_gpu,getFixP_part(part),predSignal_gpu);
+
+      }
+      // Copy Predicted Signal to host
+      initial_pos=part*size_part*nmeas;
+      cudaMemcpy(&predSignal_host[initial_pos],predSignal_gpu,size*nmeas*sizeof(T),cudaMemcpyDeviceToHost);
+      sync_check("Copying Predicted Signal from GPU\n");
+    }
+
+    if(opts.BIC_AIC.value()){
+      if(mode==0){
+	// Calculate BIC/AIC of this part from parameters
+	bic_aic.run(nvoxFit_part,nmeas,1,CFP_Tsize,FixP_Tsize,meas,params_gpu,CFP_gpu,getFixP_part(part),BIC_gpu,AIC_gpu,tau_samples_gpu);
+      }else{
+	// Calculate BIC/AIC of this part from samples (MCMC)
+	bic_aic.run(nvoxFit_part,nmeas,nsamples,CFP_Tsize,FixP_Tsize,meas,samples_gpu,CFP_gpu,getFixP_part(part),BIC_gpu,AIC_gpu,tau_samples_gpu);
+	
+      }
+      // Copy Predicted Signal to host
+      initial_pos=part*size_part;
+      cudaMemcpy(&BIC_host[initial_pos],BIC_gpu,size*sizeof(T),cudaMemcpyDeviceToHost);
+      cudaMemcpy(&AIC_host[initial_pos],AIC_gpu,size*sizeof(T),cudaMemcpyDeviceToHost);
+      sync_check("Copying BIC/AIC from GPU\n");
+    }
+  }
+ 
   template <typename T>
   void Parameters<T>::copySamplesPartGPU2Host(int part){
     cudimotOptions& opts = cudimotOptions::getInstance();
@@ -375,30 +417,6 @@ namespace Cudimot{
       out.close();
     }
 
-    if(opts.getPredictedSignal.value()){
-      Matrix PredSignalM;
-      PredSignalM.ReSize(nmeas,nvox);
-      PredSignalM=0;
-      for(int vox=0;vox<nvox;vox++){  
-	for(int mea=0;mea<nmeas;mea++){
-	  PredSignalM(mea+1,vox+1)=predSignal_host[vox*nmeas+mea];
-	}
-      }
-      string file_name;
-      file_name.append(opts.partsdir.value());
-      file_name.append("/part_");
-      file_name.append(num2str(opts.idPart.value()));
-      file_name.append("/PredictedSignal");
-      ofstream out;
-      out.open(file_name.data(), ios::out | ios::binary);
-      out.write((char*)&nvox,4); // number of voxels
-      out.write((char*)&nmeas,4); // number of measurements
-      long size=nvox*nmeas*sizeof(Real); //need Real here (NEWMAT Object!)
-      out.write((char*)&size,sizeof(long)); // number of bytes
-      out.write((char*)&PredSignalM(1,1),size);
-      out.close();
-    }
-
     // Rician Noise: Write tau samples
     if(opts.rician.value()){
       Matrix tau_samples;
@@ -423,7 +441,71 @@ namespace Cudimot{
       out.write((char*)&tau_samples(1,1),size);
       out.close();
     }
-    
+
+    if(opts.getPredictedSignal.value()){
+      Matrix PredSignalM;
+      PredSignalM.ReSize(nmeas,nvox);
+      PredSignalM=0;
+      for(int vox=0;vox<nvox;vox++){  
+	for(int mea=0;mea<nmeas;mea++){
+	  PredSignalM(mea+1,vox+1)=predSignal_host[vox*nmeas+mea];
+	}
+      }
+      string file_name;
+      file_name.append(opts.partsdir.value());
+      file_name.append("/part_");
+      file_name.append(num2str(opts.idPart.value()));
+      file_name.append("/PredictedSignal");
+      ofstream out;
+      out.open(file_name.data(), ios::out | ios::binary);
+      out.write((char*)&nvox,4); // number of voxels
+      out.write((char*)&nmeas,4); // number of measurements
+      long size=nvox*nmeas*sizeof(Real); //need Real here (NEWMAT Object!)
+      out.write((char*)&size,sizeof(long)); // number of bytes
+      out.write((char*)&PredSignalM(1,1),size);
+      out.close();
+    }
+
+    if(opts.BIC_AIC.value()){
+      Matrix BICM;
+      BICM.ReSize(1,nvox);
+      BICM=0;
+      for(int vox=0;vox<nvox;vox++){  
+	BICM(1,vox+1)=BIC_host[vox];
+      }
+      string file_name;
+      file_name.append(opts.partsdir.value());
+      file_name.append("/part_");
+      file_name.append(num2str(opts.idPart.value()));
+      file_name.append("/BIC");
+      ofstream out;
+      out.open(file_name.data(), ios::out | ios::binary);
+      out.write((char*)&nvox,4); // number of voxels
+      int nm=1;
+      out.write((char*)&nm,4); // number of measurements
+      long size=nvox*1*sizeof(Real); //need Real here (NEWMAT Object!)
+      out.write((char*)&size,sizeof(long)); // number of bytes
+      out.write((char*)&BICM(1,1),size);
+      out.close();
+
+      Matrix AICM;
+      AICM.ReSize(1,nvox);
+      AICM=0;
+      for(int vox=0;vox<nvox;vox++){  
+	AICM(1,vox+1)=AIC_host[vox];
+      }
+      file_name.clear();
+      file_name.append(opts.partsdir.value());
+      file_name.append("/part_");
+      file_name.append(num2str(opts.idPart.value()));
+      file_name.append("/AIC");
+      out.open(file_name.data(), ios::out | ios::binary);
+      out.write((char*)&nvox,4); // number of voxels
+      out.write((char*)&nm,4); // number of measurements
+      out.write((char*)&size,sizeof(long)); // number of bytes
+      out.write((char*)&AICM(1,1),size);
+      out.close();
+    }
   }
 
   template <typename T>

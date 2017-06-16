@@ -11,6 +11,7 @@
 #include "MCMC.h"
 #include "functions_gpu.h"
 #include "modelparameters.h"
+#include "macro_numerical.h"
 #include "modelfunctions.h"
 
 namespace Cudimot{
@@ -25,6 +26,7 @@ namespace Cudimot{
   __constant__ int MCprior_types [NPARAMS];
   __constant__ float MCpriors_a [NPARAMS];
   __constant__ float MCpriors_b [NPARAMS];
+  __constant__ int MCfixed [NPARAMS];
   
   // Returns the natural log of the 0th order modified Bessel function of first kind for an argument x
   // Follows the exponential implementation of the Bessel function in Numerical Recipes, Ch. 6
@@ -68,8 +70,10 @@ namespace Cudimot{
   template <typename T, bool DEBUG>
   __device__ inline void Propose(int par, T* params, T* old, T* propSD, curandState* localrandState,int debugVOX){
     *old=params[par];
-    params[par] = params[par] + curand_normal(localrandState)*propSD[par];
-
+    if(!MCfixed[par]){
+      params[par] = params[par] + curand_normal(localrandState)*propSD[par];
+    }
+      
     if(DEBUG){
       int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
       if(idVOX==debugVOX){
@@ -330,6 +334,7 @@ namespace Cudimot{
 			      T* FixP, // fixed model parameters
 			      T* samples, // to record parameters samples
 			      T* tau_samples, // TAU values of each voxel for Rician noise
+			      T* tau_propSD_global, // std of tau proposals
 			      int debugVOX)
   {
     // 1 block of threads process several voxels
@@ -418,11 +423,9 @@ namespace Cudimot{
       }
       
       if(RICIAN_NOISE && RECORDING){
-	// TAU has been already initializated and:
-	// TAU stored in the first position of tau_samples
-	// TAUpropSD stored in the second position of tau_samples
+	// TAU has been already initializated
 	*TAU=tau_samples[idVOX*nsamples];
-	*TAUpropSD=tau_samples[idVOX*nsamples+1];
+	*TAUpropSD=tau_propSD_global[idVOX];
       }
       if(DEBUG){
 	if(idVOX==debugVOX){
@@ -667,7 +670,7 @@ namespace Cudimot{
       if(RICIAN_NOISE && !RECORDING){
 	//save TAU and TAUpropSD
 	tau_samples[idVOX*nsamples]=*TAU;
-	tau_samples[idVOX*nsamples+1]=*TAUpropSD;
+	tau_propSD_global[idVOX]=*TAUpropSD;
       }
     }
   }
@@ -684,7 +687,8 @@ namespace Cudimot{
 		vector<T> bou_max,
 		vector<int> pri_types, 
 		vector<T> pri_a, 
-		vector<T> pri_b)
+		vector<T> pri_b,
+		vector<int> fix)
   {
     cudimotOptions& opts = cudimotOptions::getInstance();
     nvoxFit_part=nvoxFitpart;
@@ -725,6 +729,10 @@ namespace Cudimot{
       priors_a_host[p]=pri_a[p];
       priors_b_host[p]=pri_b[p];
     }
+    fixed_host = new int[NPARAMS];
+    for(int p=0;p<NPARAMS;p++){
+      fixed_host[p]=fix[p];
+    }
 
     cudaMemcpyToSymbol(MCbound_types,bound_types_host,NPARAMS*sizeof(int));
     cudaMemcpyToSymbol(MCbounds_min,bounds_min_host,NPARAMS*sizeof(float));
@@ -733,10 +741,13 @@ namespace Cudimot{
     cudaMemcpyToSymbol(MCprior_types,prior_types_host,NPARAMS*sizeof(int));
     cudaMemcpyToSymbol(MCpriors_a,priors_a_host,NPARAMS*sizeof(float));
     cudaMemcpyToSymbol(MCpriors_b,priors_b_host,NPARAMS*sizeof(float));
-    sync_check("MCMC: Setting Bounds & Priors");
+
+    cudaMemcpyToSymbol(MCfixed,fixed_host,NPARAMS*sizeof(int));
+    sync_check("MCMC: Setting Bounds - Priors - Fixed");
 
     //Allocate mem for proposal SD on GPU
     cudaMalloc((void**)&propSD, nvoxFit_part*NPARAMS*sizeof(T));
+    cudaMalloc((void**)&tau_propSD, nvoxFit_part*sizeof(T));
 
     // Initialise Randoms
     int blocks_Rand = nvoxFit_part/256;
@@ -781,15 +792,15 @@ namespace Cudimot{
     // Burn-In   ... always update_proposals
     if(RicianNoise){
       if(DEBUG){
-	mcmc_kernel<T,false,true,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	mcmc_kernel<T,false,true,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
       }else{
-	mcmc_kernel<T,false,true,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	mcmc_kernel<T,false,true,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
       }
     }else{
       if(DEBUG){
-	mcmc_kernel<T,false,true,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	mcmc_kernel<T,false,true,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
       }else{
-	mcmc_kernel<T,false,true,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	mcmc_kernel<T,false,true,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
       }
     }
     sync_check("MCMC Kernel: burnin step");
@@ -799,30 +810,30 @@ namespace Cudimot{
     if(updateproposal){
       if(RicianNoise){
 	if(DEBUG){
-	  mcmc_kernel<T,true,true,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	  mcmc_kernel<T,true,true,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
 	}else{
-	  mcmc_kernel<T,true,true,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	  mcmc_kernel<T,true,true,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
 	}
       }else{
 	if(DEBUG){
-	  mcmc_kernel<T,true,true,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	  mcmc_kernel<T,true,true,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
 	}else{
-	  mcmc_kernel<T,true,true,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	  mcmc_kernel<T,true,true,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
 	}
       }
       
     }else{ // no_updateproposal
       if(RicianNoise){
 	if(DEBUG){
-	  mcmc_kernel<T,true,false,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	  mcmc_kernel<T,true,false,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
 	}else{
-	  mcmc_kernel<T,true,false,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	  mcmc_kernel<T,true,false,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
 	}
       }else{
 	if(DEBUG){
-	  mcmc_kernel<T,true,false,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	  mcmc_kernel<T,true,false,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
 	}else{
-	  mcmc_kernel<T,true,false,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,debugVOX);
+	  mcmc_kernel<T,true,false,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
 	}
       }
     }

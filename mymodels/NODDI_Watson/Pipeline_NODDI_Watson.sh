@@ -8,29 +8,7 @@
 #
 # Pipeline for fitting NODDI-Watson 
 
-premodel1=NODDI_Watson_Init
-premodel2=NODDI_Watson_FitFrac
-modelname=NODDI_Watson
-export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${FSLDIR}/lib
-bindir=/home/fs0/moisesf/scratch/THESIS/microstructure_models/CUDIMOT/bin
-modelsdir=/home/fs0/moisesf/scratch/THESIS/microstructure_models/CUDIMOT/cudimot/mymodels
-
-Usage() {
-    echo ""
-    echo "Usage: Pipeline_NODDI_Watson.sh <subject_directory> [options]"
-    echo ""
-    echo "expects to find data and nodif_brain_mask in subject directory"
-    echo ""
-    echo "<options>:"
-    echo "-Q (name of the GPU(s) queue, default cuda.q (defined in environment variable: FSLGECUDAQ)"
-    echo "-NJOBS (number of jobs to queue, the data is divided in NJOBS parts, usefull for a GPU cluster, default 4)"
-    echo "--runMCMC (if you want to run MCMC)"
-    echo "-b (burnin period, default 5000)"
-    echo "-j (number of jumps, default 1250)"
-    echo "-s (sample every, default 25)"
-    echo ""
-    exit 1
-}
+bindir=${FSLDEVDIR}/bin
 
 make_absolute(){
     dir=$1;
@@ -44,8 +22,31 @@ make_absolute(){
     fi
     echo ${dir_all}
 }
+Usage() {
+    echo ""
+    echo "Usage: Pipeline_NODDI_Watson.sh <subject_directory> [options]"
+    echo ""
+    echo "expects to find data and nodif_brain_mask in subject directory"
+    echo ""
+    echo "<options>:"
+    echo "-Q (name of the GPU(s) queue, default cuda.q (defined in environment variable: FSLGECUDAQ)"
+    echo "-NJOBS (number of jobs to queue, the data is divided in NJOBS parts, usefull for a GPU cluster, default 4)"
+    echo "--runMCMC (if you want to run MCMC)"
+    echo "-b (burnin period, default 5000)"
+    echo "-j (number of jumps, default 1250)"
+    echo "-s (sample every, default 25)"
+    echo "--BIC (if you want to calculate BIC)"
+    echo ""
+    exit 1
+}
 
 [ "$1" = "" ] && Usage
+
+modelname=NODDI_Watson
+step1=GridSeach
+step2=FitFractions
+
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${FSLDIR}/lib
 
 subjdir=`make_absolute $1`
 subjdir=`echo $subjdir | sed 's/\/$/$/g'`
@@ -59,14 +60,13 @@ echo subjectdir is $subjdir
 start=`date +%s`
 
 #parse option arguments
-qsys=0
 njobs=4
-fudge=1
 burnin=1000
 njumps=1250
 sampleevery=25
 other=""
 queue=""
+lastStepModelOpts=""
 
 shift
 while [ ! -z "$1" ]
@@ -77,16 +77,18 @@ do
       -b) burnin=$2;shift;;
       -j) njumps=$2;shift;;
       -s) sampleevery=$2;shift;;
+      --runMCMC) lastStepModelOpts=$lastStepModelOpts" --runMCMC";;
+      --BIC) lastStepModelOpts=$lastStepModelOpts" --BIC";;
       *) other=$other" "$1;;
   esac
   shift
 done
 
 #Set options
-opts="--fudge=$fudge --bi=$burnin --nj=$njumps --se=$sampleevery"
+opts="--bi=$burnin --nj=$njumps --se=$sampleevery"
 opts="$opts $other"
 
-if [ $qsys -eq 0 ] && [ "x$SGE_ROOT" != "x" ]; then
+if [ "x$SGE_ROOT" != "x" ]; then
 	queue="-q $FSLGECUDAQ"
 fi
 
@@ -119,12 +121,12 @@ mkdir -p ${subjdir}.${modelname}/
 mkdir -p ${subjdir}.${modelname}/diff_parts
 mkdir -p ${subjdir}.${modelname}/logs
 mkdir -p ${subjdir}.${modelname}/Dtifit
-mkdir -p ${subjdir}.${modelname}/${premodel1}
-mkdir -p ${subjdir}.${modelname}/${premodel1}/diff_parts
-mkdir -p ${subjdir}.${modelname}/${premodel1}/logs
-mkdir -p ${subjdir}.${modelname}/${premodel2}
-mkdir -p ${subjdir}.${modelname}/${premodel2}/diff_parts
-mkdir -p ${subjdir}.${modelname}/${premodel2}/logs
+mkdir -p ${subjdir}.${modelname}/${step1}
+mkdir -p ${subjdir}.${modelname}/${step1}/diff_parts
+mkdir -p ${subjdir}.${modelname}/${step1}/logs
+mkdir -p ${subjdir}.${modelname}/${step2}
+mkdir -p ${subjdir}.${modelname}/${step2}/diff_parts
+mkdir -p ${subjdir}.${modelname}/${step2}/logs
 part=0
 
 echo Copying files to output directory
@@ -136,11 +138,13 @@ fi
 
 # Specify Common Fixed Parameters
 CFP_file=$subjdir.${modelname}/CFP
-echo ${subjdir}/bvecs > $CFP_file
-echo ${subjdir}/bvals >> $CFP_file
+cp ${subjdir}/bvecs $subjdir.${modelname}
+cp ${subjdir}/bvals $subjdir.${modelname}
+echo  $subjdir.${modelname}/bvecs > $CFP_file
+echo  $subjdir.${modelname}/bvals >> $CFP_file
 
 #Set more options
-opts=$opts" --data=${subjdir}/data --maskfile=$subjdir.${modelname}/nodif_brain_mask --subjdir=$subjdir --forcedir --CFP=$CFP_file"
+opts=$opts" --data=${subjdir}/data --maskfile=$subjdir.${modelname}/nodif_brain_mask --forcedir --CFP=$CFP_file"
 
 # Calculate S0 with the mean of the volumes with bval<50
 bvals=`cat ${subjdir}/bvals`
@@ -156,181 +160,92 @@ fslmerge -t ${subjdir}.${modelname}/temporal/S0s ${subjdir}.${modelname}/tempora
 fslmaths ${subjdir}.${modelname}/temporal/S0s -Tmean ${subjdir}.${modelname}/S0
 rm -rf ${subjdir}.${modelname}/temporal
 
+# Specify Fixed parameters: S0
+FixPFile=${subjdir}.${modelname}/FixP
+echo ${subjdir}.${modelname}/S0 >> $FixPFile
 
 ##############################################################################
 ################################ First Dtifit  ###############################
 ##############################################################################
 echo "Queue Dtifit"
 PathDTI=${subjdir}.${modelname}/Dtifit
-dtifit_command="${modelsdir}/utils/Run_dtifit.sh ${subjdir} ${subjdir}.${modelname} ${bindir}"
+dtifit_command="${bindir}/Run_dtifit.sh ${subjdir} ${subjdir}.${modelname} ${bindir}"
 #SGE
 dtifitProcess=`${FSLDIR}/bin/fsl_sub $queue -l $PathDTI/logs -N dtifit $dtifit_command`
 
+##### Model Parameters: fiso, fintra, kappa, th, ph  ######
 #############################################################
 ##################### Grid Search Step ######################
 #############################################################
-echo "Queue Fitting process for model "${premodel1}
-PathPreModel1=$subjdir.${modelname}/${premodel1}
-PriorsFile=$modelsdir/${premodel1}/modelpriors
+echo "Queue GridSearch process"
+PathStep1=$subjdir.${modelname}/${step1}
 
-# Fixed parameters
-FixPFile=$PathPreModel1/FixP
-echo ${PathDTI}/dtifit_V1_th.nii.gz > $FixPFile
-echo ${PathDTI}/dtifit_V1_ph.nii.gz >> $FixPFile
-echo ${subjdir}.${modelname}/S0 >> $FixPFile
+# Create file to specify initialisation parameters (2 parameters: th,ph)
+InitializationFile=$PathStep1/InitializationParameters
+echo "" > $InitializationFile #fiso
+echo "" >> $InitializationFile #fintra
+echo "" >> $InitializationFile #kappa
+echo ${PathDTI}/dtifit_V1_th.nii.gz >> $InitializationFile #th
+echo ${PathDTI}/dtifit_V1_ph.nii.gz >> $InitializationFile #ph
 
 # Do GridSearch (fiso,fintra,kappa)
-GridFile=$PathPreModel1/GridSearch
-echo "search[0]=(0,0.25,0.5,0.75,1)" > $GridFile
-echo "search[1]=(0,0.25,0.5,0.75,1)" >> $GridFile
-echo "search[2]=(0.5,1,2,4,8)" >> $GridFile
+GridFile=$PathStep1/GridSearch
+echo "search[0]=(0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0)" > $GridFile #fiso
+echo "search[1]=(0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0)" >> $GridFile #fintra
+echo "search[2]=(1,2,3,4,5,6,7,8)" >> $GridFile #kappa
 
-# Split the dataset into parts
-partsdir=$PathPreModel1/diff_parts
-outputdir=$PathPreModel1
-PreModel1Opts=$opts" --outputdir=$outputdir --partsdir=$partsdir --priors=$PriorsFile --FixP=$FixPFile --gridSearch=$GridFile --no_LevMar"
+partsdir=$PathStep1/diff_parts
+outputdir=$PathStep1
+Step1Opts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --gridSearch=$GridFile --no_LevMar --init_params=$InitializationFile --fixed=3,4"
 
-PreprocOpts=$PreModel1Opts" --idPart=0 --nParts=$njobs --logdir=$PathPreModel1/logs/preProcess"
-preproc_command="$bindir/split_parts_${premodel1} $PreprocOpts"
+postproc=`${bindir}/jobs_wrapper.sh $PathStep1 $dtifitProcess $modelname GS $njobs $Step1Opts`
 
-#SGE
-preProcess=`${FSLDIR}/bin/fsl_sub $queue -l $PathPreModel1/logs -N ${premodel1}_preproc -j $dtifitProcess $preproc_command`
-
-[ -f $PathPreModel1/commands.txt ] && rm $PathPreModel1/commands.txt
-part=0
-while [ $part -lt $njobs ]
-do
-    partzp=`$FSLDIR/bin/zeropad $part 4`
-    
-    Fitopts=$PreModel1Opts
-
-    echo "$bindir/${premodel1} --idPart=$part --nParts=$njobs --logdir=$PathPreModel1/logs/${premodel1}_$partzp $Fitopts" >> $PathPreModel1/commands.txt
-	    
-    part=$(($part + 1))
-done
-
-#SGE
-FitProcess=`${FSLDIR}/bin/fsl_sub $queue -N ${premodel1} -j $preProcess -t $PathPreModel1/commands.txt -l $PathPreModel1/logs`
-
-PostprocOpts=$PreModel1Opts" --idPart=0 --nParts=$njobs --logdir=$PathPreModel1/logs/postProcess"
-postproc_command="$bindir/merge_parts_${premodel1} $PostprocOpts"
-
-#SGE
-postProcess=`${FSLDIR}/bin/fsl_sub $queue -j $FitProcess -N ${premodel1}_postproc_gpu -l $PathPreModel1/logs $postproc_command`
-
-#####################################################################
-##################### Fit only Fractionalities ######################
-#####################################################################
-echo "Queue Fitting process for model "${premodel2}
-PathPreModel2=$subjdir.${modelname}/${premodel2}
-PriorsFile=$modelsdir/${premodel2}/modelpriors
+###############################################################
+##################### Fit only Fractions ######################
+###############################################################
+echo "Queue Fitting Fractions process"
+PathStep2=$subjdir.${modelname}/${step2}
 
 # Create file to specify initialisation parameters (2 parameters: fiso,fintra)
-InitializationFile=$PathPreModel2/InitializationParameters
-echo $PathPreModel1/Param_0_samples > $InitializationFile
-echo $PathPreModel1/Param_1_samples >> $InitializationFile
+InitializationFile=$PathStep2/InitializationParameters
+echo $PathStep1/Param_0_samples > $InitializationFile #fiso
+echo $PathStep1/Param_1_samples >> $InitializationFile #fintra
+echo $PathStep1/Param_2_samples >> $InitializationFile #kappa
+echo ${PathDTI}/dtifit_V1_th.nii.gz >> $InitializationFile #th
+echo ${PathDTI}/dtifit_V1_ph.nii.gz >> $InitializationFile #ph
 
-# Fixed parameters: kappa, th, ph, S0
-FixPFile=$PathPreModel2/FixP
-echo ${PathPreModel1}/Param_2_samples > $FixPFile
-echo ${PathDTI}/dtifit_V1_th.nii.gz >> $FixPFile
-echo ${PathDTI}/dtifit_V1_ph.nii.gz >> $FixPFile
-echo ${subjdir}.${modelname}/S0 >> $FixPFile
+partsdir=$PathStep2/diff_parts
+outputdir=$PathStep2
+Step2Opts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --init_params=$InitializationFile --fixed=2,3,4"
 
-# Split the dataset into parts
-partsdir=$PathPreModel2/diff_parts
-outputdir=$PathPreModel2
-PreModel2Opts=$opts" --outputdir=$outputdir --partsdir=$partsdir --init_params=$InitializationFile --priors=$PriorsFile --FixP=$FixPFile"
-
-PreprocOpts=$PreModel2Opts" --idPart=0 --nParts=$njobs --logdir=$PathPreModel2/logs/preProcess"
-preproc_command="$bindir/split_parts_${premodel2} $PreprocOpts"
-
-#SGE
-preProcess=`${FSLDIR}/bin/fsl_sub $queue -l $PathPreModel2/logs -N ${premodel2}_preproc -j $postProcess $preproc_command`
-
-[ -f $PathPreModel2/commands.txt ] && rm $PathPreModel2/commands.txt
-part=0
-while [ $part -lt $njobs ]
-do
-    partzp=`$FSLDIR/bin/zeropad $part 4`
-    
-    Fitopts=$PreModel2Opts
-
-    echo "$bindir/${premodel2} --idPart=$part --nParts=$njobs --logdir=$PathPreModel2/logs/${premodel2}_$partzp $Fitopts" >> $PathPreModel2/commands.txt
-	    
-    part=$(($part + 1))
-done
-
-#SGE
-FitProcess=`${FSLDIR}/bin/fsl_sub $queue -N ${premodel2} -j $preProcess -t $PathPreModel2/commands.txt -l $PathPreModel2/logs`
-
-PostprocOpts=$PreModel2Opts" --idPart=0 --nParts=$njobs --logdir=$PathPreModel2/logs/postProcess"
-postproc_command="$bindir/merge_parts_${premodel2} $PostprocOpts"
-
-#SGE
-postProcess=`${FSLDIR}/bin/fsl_sub $queue -j $FitProcess -N ${premodel2}_postproc_gpu -l $PathPreModel2/logs $postproc_command`
+postproc=`${bindir}/jobs_wrapper.sh $PathStep2 $postproc $modelname FitFractions $njobs $Step2Opts`
 
 ######################################################################################
 ######################### Fit all the parameters of the Model ########################
 ######################################################################################
-echo "Queue Fitting process for model "${modelname}
-PriorsFile=$modelsdir/${modelname}/modelpriors
+echo "Queue Fitting process"
 
 # Create file to specify initialization parameters (5 parameters: fiso,fintra,kappa,th,ph)
 InitializationFile=$subjdir.${modelname}/InitializationParameters
-echo $PathPreModel2/Param_0_samples > $InitializationFile #fiso
-echo $PathPreModel2/Param_1_samples >> $InitializationFile #fintra
-echo ${PathPreModel1}/Param_2_samples >> $InitializationFile #kappa
+echo $PathStep2/Param_0_samples > $InitializationFile #fiso
+echo $PathStep2/Param_1_samples >> $InitializationFile #fintra
+echo ${PathStep1}/Param_2_samples >> $InitializationFile #kappa
 echo ${PathDTI}/dtifit_V1_th.nii.gz >> $InitializationFile #th
 echo ${PathDTI}/dtifit_V1_ph.nii.gz  >> $InitializationFile #ph
 
-# S0 is a Fix parameters
-FixPFile=$subjdir.${modelname}/FixP
-echo  ${subjdir}.${modelname}/S0 > $FixPFile
-
 partsdir=${subjdir}.${modelname}/diff_parts
 outputdir=${subjdir}.${modelname}
-ModelOpts=$opts" --outputdir=$outputdir --partsdir=$partsdir --init_params=$InitializationFile --FixP=$FixPFile --priors=$PriorsFile"
+ModelOpts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --init_params=$InitializationFile $lastStepModelOpts"
 
-# Split the dataset into parts
-PreprocOpts=$ModelOpts" --idPart=0 --nParts=$njobs --logdir=$subjdir.${modelname}/logs/preProcess"
-preproc_command="$bindir/split_parts_${modelname} $PreprocOpts"
-
-#SGE
-preProcess=`${FSLDIR}/bin/fsl_sub $queue -j $postProcess -l ${subjdir}.${modelname}/logs -N ${modelname}_preproc $preproc_command`
-
-[ -f ${subjdir}.${modelname}/commands.txt ] && rm ${subjdir}.${modelname}/commands.txt
-part=0
-while [ $part -lt $njobs ]
-do
-    partzp=`$FSLDIR/bin/zeropad $part 4`
-    
-    Fitopts=$ModelOpts
-    
-    echo "$bindir/${modelname} --idPart=$part --nParts=$njobs --logdir=$subjdir.${modelname}/logs/${modelname}_$partzp $Fitopts" >> ${subjdir}.${modelname}/commands.txt
-    
-    part=$(($part + 1))
-done
-
-#SGE
-FitProcess=`${FSLDIR}/bin/fsl_sub $queue -N ${modelname} -j $preProcess -t ${subjdir}.${modelname}/commands.txt -l ${subjdir}.${modelname}/logs`
-
-PostprocOpts=$ModelOpts" --idPart=0 --nParts=$njobs --logdir=$subjdir.${modelname}/logs/postProcess"
-postproc_command="$bindir/merge_parts_${modelname} $PostprocOpts"
-
-#SGE
-postProcess=`${FSLDIR}/bin/fsl_sub $queue -j $FitProcess -N ${modelname}_postproc_gpu -l ${subjdir}.${modelname}/logs $postproc_command`
-
+postproc=`${bindir}/jobs_wrapper.sh ${subjdir}.${modelname} $postproc $modelname FitProcess $njobs $ModelOpts`
 
 #########################################
 ### Calculate Dispersion Index & dyads ###
 ##########################################
-finish_command="${modelsdir}/${modelname}/${modelname}_finish.sh ${subjdir}.${modelname}"
+finish_command="${bindir}/${modelname}_finish.sh ${subjdir}.${modelname}"
 #SGE
-finishProcess=`${FSLDIR}/bin/fsl_sub $queue -l ${subjdir}.${modelname}/logs -N ${modelname}_finish -j postProcess $finish_command`
+finishProcess=`${FSLDIR}/bin/fsl_sub $queue -l ${subjdir}.${modelname}/logs -N ${modelname}_finish -j $postproc $finish_command`
 
 endt=`date +%s`
-
 runtime=$((endt-start))
 echo Runtime $runtime
- 

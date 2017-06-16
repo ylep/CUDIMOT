@@ -1,4 +1,6 @@
-/* debug.cu
+/* testFunctions.cu
+
+   A method to evaluate the model predicted signal and the derivatives given all the parameters (fixed and non-fixed). It evaluates the functions for just one set of parameters (does no accept volumes)
 
    Moises Hernandez-Fernandez - FMRIB Image Analysis Group
    
@@ -6,12 +8,13 @@
 
 /* CCOPYRIGHT */
 
+
 #include <iostream>
 #include "checkcudacalls.h"
 #include "functions_gpu.h"
 #include "modelparameters.h"
+#include "macro_numerical.h"
 #include "modelfunctions.h"
-#include "compileOptions/type.h"
 
 using namespace std;
 
@@ -44,6 +47,10 @@ __global__ void testFunctions_kernel(T* params,
    printf("Predicted_Signal: %f\n\n",pred);
    for(int i=0; i<NPARAMS; i++){
      printf("Derivative[%i]: %f\n",i,myderivatives[i]);
+   }
+   printf("-------------------------------\n",pred);
+   for(int i=0; i<NPARAMS; i++){
+     printf("Numerical Derivative[%i]: %f\n",i,numerical(i,params,CFP,FixP));
    }
  }
 

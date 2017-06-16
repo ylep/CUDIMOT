@@ -21,7 +21,7 @@
 #include <curand_kernel.h>
 #include <curand.h>
 #include <curand_kernel.h>
-#include "compileOptions/grid.h"
+#include "gridOptions.h"
 #include "cudimot.h"
 #include "checkcudacalls.h"
 #include "cudimotoptions.h"
@@ -84,6 +84,11 @@ namespace Cudimot{
      * Standard Deviation of Proposal Distributions on the GPU
      */
      T* propSD;
+
+    /**
+     * Standard Deviation of Proposal Distributions for Tau parameter (rician noise) on the GPU
+     */
+    T* tau_propSD;
     
     /**
      * Type of each parameter bounds
@@ -116,6 +121,11 @@ namespace Cudimot{
     float* priors_b_host;
 
     /**
+     * 0: Parameter non fixed, 1: Parameter fixed
+     */
+    int* fixed_host;
+
+    /**
      * Activate debugging messages for a voxel. It prints the value of some variables at certain steps of Levenberg_Marquardt (Parameters, PredictedSignal, Derivatives, Gradient, Proposed Parameters)
      */
     bool DEBUG;
@@ -137,10 +147,12 @@ namespace Cudimot{
      * @param prior_types Vector with the type of each parameter type
      * @param prior_a Vector with the first argument of each prior
      * @param prior_b Vector with the second argument of each prior
+     * @param fixed Vector with information to know if parameters are fixed
      */
     MCMC(int nvoxFitpart, 
 	 vector<int> bound_types, vector<T> bounds_min, vector<T> bounds_max,
-	 vector<int> prior_types, vector<T> priors_a, vector<T> prior_b);
+	 vector<int> prior_types, vector<T> priors_a, vector<T> prior_b,
+	 vector<int> fixed);
 
     /**
      * Run MCMC algorithm on the GPU

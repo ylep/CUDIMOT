@@ -10,7 +10,6 @@
 #include "boost/filesystem.hpp"
 #include "newmat.h"
 #include "newimage/newimageall.h"
-#include "compileOptions/type.h"
 #include "cudimotoptions.h"
 #include "dMRI_Data.h"
 #include "Model.h"
@@ -85,7 +84,16 @@ int main(int argc, char *argv[])
     exit (EXIT_FAILURE);
   }
 
-  Model<MyType> model;
+  // get path of this binary to get the priors file
+  char buf[1024];
+  ssize_t count = readlink("/proc/self/exe",buf,sizeof(buf)-1);
+  string bin_path(buf,(count > 0) ? count : 0 );
+  string default_priors_file(bin_path.substr(0,bin_path.find_last_of("\\/")));
+  string pattern("merge_parts_");
+  default_priors_file+=("/"+bin_path.substr(bin_path.find(pattern)+pattern.size())+"_priors");
+  
+  Model<MyType> model(default_priors_file);
+  
   int nparams = model.getNparams();
 
   string path_in;
@@ -109,6 +117,17 @@ int main(int argc, char *argv[])
     
     // it does not know the number of measurements. Set to -1 and it will get the number from the first part
     join_Parts(mask,path_in,file_name,output_file,-1,opts.nParts.value(),-10,-10);
+  }
+
+  // If BIC/AIC, join the different parts
+  if(opts.BIC_AIC.value()){
+    string file_name = "BIC";
+    std::string output_file=path_out+"/"+file_name;
+    join_Parts(mask,path_in,file_name,output_file,1,opts.nParts.value(),-10,-10);
+    file_name = "AIC";
+    output_file=path_out+"/"+file_name;
+    join_Parts(mask,path_in,file_name,output_file,1,opts.nParts.value(),-10,-10);
+    
   }
 
   // If Rician Noise, join tau samples

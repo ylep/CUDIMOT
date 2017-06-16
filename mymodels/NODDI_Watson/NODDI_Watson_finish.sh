@@ -8,7 +8,7 @@
 
 Usage() {
     echo ""
-    echo "Usage: Ball_2_Sticks_Multiexponential_finish <subject_directory>"
+    echo "Usage: NODDI_Watson_finish <subject_directory>"
     echo ""
     echo "expects to find all the estimatedParameters and nodif_brain_mask in subject directory"
     echo ""
@@ -26,17 +26,15 @@ mv $directory/Param_2_samples.nii.gz $directory/kappa_samples.nii.gz
 mv $directory/Param_3_samples.nii.gz $directory/th_samples.nii.gz
 mv $directory/Param_4_samples.nii.gz $directory/ph_samples.nii.gz
 
-
-
 Two_div_pi=0.636619772367581
+
+${FSLDIR}/bin/fslmaths ${OUTdir}/kappa_samples -mul 10 ${OUTdir}/kappa_samples
 
 $FSLDIR/bin/fslmaths $directory/fiso_samples.nii.gz -Tmean $directory/mean_fiso
 $FSLDIR/bin/fslmaths $directory/fintra_samples.nii.gz -Tmean $directory/mean_fintra
 $FSLDIR/bin/fslmaths $directory/kappa_samples.nii.gz -Tmean $directory/mean_kappa
 $FSLDIR/bin/make_dyadic_vectors $directory/th_samples $directory/ph_samples $directory/nodif_brain_mask.nii.gz dyads1
 
-
-
-${FSLDIR}/bin/fslmaths $directory/mean_kappa -recip -atan -mul $Two_div_pi $directory/ODI
+${FSLDIR}/bin/fslmaths $directory/mean_kappa -recip -atan -mul $Two_div_pi $directory/OD
 
 

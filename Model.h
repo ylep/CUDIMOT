@@ -140,6 +140,11 @@ namespace Cudimot{
      * Second parameter of the priors (standard_deviation or beta)
      */
     vector<T> priors_b;
+
+    /**
+     * Vector to specify if a parameter is fixed. 0 non-fixed, 1 fixed
+     */
+    vector<int> fixed;
     
      /**
      * Number of parameter-value combination to try in GridSearch
@@ -164,7 +169,7 @@ namespace Cudimot{
     /**
      * This method reads the model configuration file and sets the class attributes. File name must be provided at execution time
      */
-    void Modelparser();
+    void Modelparser(string default_priors_file);
 
     /**
      * This method reads the values of each parameter to try in GridSearch (if used). File name must be provided at execution time
@@ -180,7 +185,7 @@ namespace Cudimot{
     /**
      * Constructor
      */
-    Model();
+    Model(string default_priors_file);
 
     /**
      * Destructor
@@ -230,7 +235,7 @@ namespace Cudimot{
     vector<T> getBounds_max();
 
     /**
-     * @return Vector with the the type of each parameter prior
+     * @return Vector with the type of each parameter prior
      */
     vector<int> getPrior_types();
 
@@ -243,6 +248,11 @@ namespace Cudimot{
      * @return Vector with the second argument of each prior
      */
     vector<T> getPriors_b();
+
+    /**
+     * @return Vector for specifying if a parameter is fixed or not
+     */
+    vector<int> getFixed();
 
     /*
      * @return Number of parameters in each combination of the grid

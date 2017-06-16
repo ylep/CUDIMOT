@@ -8,7 +8,8 @@
 
 
 #include <sys/time.h>
-#include "compileOptions/type.h"
+//#include <boost/filesystem/operations.hpp>
+//#include <boost/filesystem/path.hpp>
 #include "cudimotoptions.h"
 #include "init_gpu.h"
 #include "dMRI_Data.h"
@@ -42,11 +43,18 @@ int main(int argc, char *argv[]){
     cerr << "CUDIMOT Error: You must select at least one method to fit the model: GridSearch, Levenberg_Marquardt or MCMC" << endl;
     exit(-1);
   }
-  
+
   // Encapsulate dMRI data
   dMRI_Data<MyType> data;
+
+  // get path of this binary to get the priors file
+  char buf[1024];
+  ssize_t count = readlink("/proc/self/exe",buf,sizeof(buf)-1);
+  string bin_path(buf,(count > 0) ? count : 0 );
+  string default_priors_file(bin_path+"_priors");
   
-  Model<MyType> model;
+  Model<MyType> model(default_priors_file);
+  
   Parameters<MyType> params(model,data);
 
   GridSearch<MyType> methodGridSearch(model.getNGridParams(),
@@ -59,7 +67,8 @@ int main(int argc, char *argv[]){
 
   Levenberg_Marquardt<MyType> methodLM(model.getBound_types(),
 				       model.getBounds_min(),
-				       model.getBounds_max());
+				       model.getBounds_max(),
+				       model.getFixed());
 
   MCMC<MyType> methodMCMC(data.getNvoxFit_part(),
 			  model.getBound_types(),
@@ -67,14 +76,14 @@ int main(int argc, char *argv[]){
 			  model.getBounds_max(),
 			  model.getPrior_types(),
 			  model.getPriors_a(),
-			  model.getPriors_b());
+			  model.getPriors_b(),
+			  model.getFixed());
 
   // Data and parameters are divided into parts => process each part
   for(int part=0;part<data.getNparts();part++){
-    int part_size=0;
-
+    
+    int part_size=0;    
     MyType* meas=data.getMeasPart(part,part_size);
-
     MyType* parameters_part = params.getParametersPart(part);
     
     if(opts.gridSearch.value()!=""){
@@ -97,6 +106,7 @@ int main(int argc, char *argv[]){
     
     if(!opts.runMCMC.value()){
       params.copyParamsPartGPU2Host(part);
+      params.calculate_predictedSignal_BIC_AIC(0,part,meas);
     }else{
       methodMCMC.run(part_size,data.getNmeas(),
 		     params.getTsize_CFP(),
@@ -108,7 +118,8 @@ int main(int argc, char *argv[]){
 		     params.getTauSamples());
       
       params.copyParamsPartGPU2Host(part);
-      params.copySamplesPartGPU2Host(part); 
+      params.copySamplesPartGPU2Host(part);
+      params.calculate_predictedSignal_BIC_AIC(1,part,meas);
     }
   }
   if(!opts.runMCMC.value()){

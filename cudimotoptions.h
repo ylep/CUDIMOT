@@ -30,18 +30,14 @@ namespace Cudimot {
     Option<bool> help;
     Option<string> logdir;
     Option<bool> forcedir;
-    Option<string> priorsfile;
     Option<string> datafile;
     Option<string> maskfile;
-    Option<string> subjdir;
     Option<string> partsdir;
     Option<string> outputdir;
     Option<int> idPart;
     Option<int> nParts;
-    Option<float> fudge;
     Option<int> njumps;
     Option<int> nburn;
-    Option<int> nburn_noard;
     Option<int> sampleevery;
     Option<int> updateproposalevery;
     Option<bool> no_updateproposal;
@@ -56,8 +52,11 @@ namespace Cudimot {
     Option<bool> getPredictedSignal;
     Option<string> CFP;
     Option<string> FixP;
+    Option<string> fixed;
     Option<string> init_params;
     Option<string> debug;
+    Option<bool> BIC_AIC;
+    FmribOption<string> priorsfile;
     
     void parse_command_line(int argc, char** argv,  Log& logger);
   
@@ -88,17 +87,11 @@ namespace Cudimot {
 	forcedir(string("--forcedir"),false,
 		string("\tUse the actual directory name given - i.e. don't add + to make a new directory"),
 		false,no_argument),
-	priorsfile(string("--priors"), string(""),
-		string("\tFile with parameters information (initialization, bounds and priors)"),
-		true, requires_argument),
 	datafile(string("--data"), string("data"),
 		string("\t\tData file"),
 		true, requires_argument),  
 	maskfile(string("--maskfile"), string("nodif_brain_mask"),
 		string("\tMask file"),
-		true, requires_argument),
-	subjdir(string("--subjdir"), string(""),
-		string("\tSubject directory"),
 		true, requires_argument),
 	partsdir(string("--partsdir"), string(""),
 		string("\tDirectory where different parts of the data/results will be stored"),
@@ -112,17 +105,11 @@ namespace Cudimot {
 	nParts(string("--nParts"),0,
 		string("\tTotal number of parts of the dataset [1..N]"),
 		true, requires_argument),
-	fudge(string("--fudge"),1,
-		string("\t\tARD fudge factor"),
-		false,requires_argument),
 	njumps(string("--nj,--njumps"),1250,
 		string("\tNum of jumps to be made by MCMC (default is 1250)"),
 		false,requires_argument),
 	nburn(string("--bi,--burnin"),1000,
 		string("\tTotal num of jumps at start of MCMC to be discarded (default is 1000)"),
-		false,requires_argument),
-	nburn_noard(string("--bn,--burnin_noard"),0,
-		string("Num of burnin jumps before the ard is imposed (default is 0)"),
 		false,requires_argument),
 	sampleevery(string("--se,--sampleevery"),25,
 		string("\tNum of jumps for each sample (MCMC) (default is 25)"),
@@ -165,12 +152,21 @@ namespace Cudimot {
 		false, requires_argument),  
 	FixP(string("--FixP"), string(""),
 		string("\t\tFile with a list of NIfTI files for specifying the fixed parameters of the model"),
-		false, requires_argument),  
+		false, requires_argument), 
+	fixed(string("--fixed"), string(""),
+		string("\t\tList of the Ids of the fixed parameters separated by commas. For example: --fixed=2,4"),
+		false, requires_argument), 
 	init_params(string("--init_params"), string(""),
 		string("\tFile with a list of NIfTI files for the initialization of the model parameters"),
 		false, requires_argument),
         debug(string("--debug"), string(""),
 		string("\t\tSpecify a voxel for debugging. Some variables at certain steps of the algorithms will be printed (use few iterations)"),
+		false, requires_argument),
+	BIC_AIC(string("--BIC_AIC"), false,
+	        string("\tCalculate Bayesian and Akaike Information Criteria at the end"),
+		false, no_argument),
+	priorsfile(string("--priors"), string(""),
+		string("\tFile with parameters information (initialization, bounds and priors)"),
 		false, requires_argument),
 
    options("CUDIMOT","YourModelName --help (for list of options)\n")
@@ -179,18 +175,14 @@ namespace Cudimot {
 	options.add(help);
 	options.add(logdir);
 	options.add(forcedir);
-	options.add(priorsfile);
 	options.add(datafile);
 	options.add(maskfile);
-	options.add(subjdir);
 	options.add(partsdir);
 	options.add(outputdir);
 	options.add(idPart);
 	options.add(nParts);
-	options.add(fudge);
 	options.add(njumps);
 	options.add(nburn);
-	options.add(nburn_noard);
 	options.add(sampleevery);
 	options.add(updateproposalevery);
 	options.add(no_updateproposal);
@@ -205,8 +197,11 @@ namespace Cudimot {
 	options.add(getPredictedSignal);
 	options.add(CFP);
 	options.add(FixP);
+	options.add(fixed);
 	options.add(init_params);
 	options.add(debug);
+	options.add(BIC_AIC);
+	options.add(priorsfile);
      }
      catch(X_OptionError& e) {
        options.usage();

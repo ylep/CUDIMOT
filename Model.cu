@@ -14,9 +14,15 @@ namespace Cudimot{
   
   // This method reads the list of parameters from a file. File must be provided at execution time.
   template <typename T>
-  void Model<T>::Modelparser(){
+  void Model<T>::Modelparser(string default_priors_file){
     cudimotOptions& opts = cudimotOptions::getInstance();
-    string input_file(opts.priorsfile.value());
+
+    string input_file;
+    if(opts.priorsfile.value()!=""){
+      input_file.assign(opts.priorsfile.value());
+    }else{
+      input_file.assign(default_priors_file);
+    }
     ifstream file_parameters(input_file.data());
     //string mark_start="NEW_MODEL";
     string mark_comment="//";
@@ -264,8 +270,29 @@ namespace Cudimot{
       //}
 
     }else{
-      cerr << "CUDIMOT Error: Unable to open Parameters file configuration: " << input_file.data() << endl; 
+      cerr << "CUDIMOT Error: Unable to open file with Priors information: " << input_file.data() << endl; 
       exit(-1);
+    }
+
+    fixed.resize(nparams);
+    for(int p=0;p<nparams;p++) 
+      fixed[p]=0;
+    if(opts.fixed.value()!=""){
+      stringstream ss(opts.fixed.value());
+      vector<int> vect;
+      int i;
+      while (ss >> i){
+	if(i>=nparams){
+	   cerr << "CUDIMOT Error: Wrong number of parameter " <<  i << " when specifying the fixed parameters" << endl;
+	   exit(-1);
+	}
+        vect.push_back(i);
+        if (ss.peek() == ',')
+	  ss.ignore();
+      }
+      for (i=0; i<vect.size(); i++){
+	fixed[vect[i]]=1;
+      }
     }
   }
 
@@ -364,10 +391,10 @@ namespace Cudimot{
   }
   
   template <typename T>
-  Model<T>::Model(){
+  Model<T>::Model(string default_priors_file){
     cudimotOptions& opts = cudimotOptions::getInstance();
     /// Read text file with parameters information (initialization, priors)
-    Modelparser();
+    Modelparser(default_priors_file);
     if(opts.gridSearch.value()!=""){
       Parser_gridSearch(); // if grid_search, set the grid
     }
@@ -429,6 +456,11 @@ namespace Cudimot{
   template <typename T>
   vector<T> Model<T>::getPriors_b(){
     return priors_b;
+  }
+
+  template <typename T>
+  vector<int> Model<T>::getFixed(){
+    return fixed;
   }
 
   template <typename T>
