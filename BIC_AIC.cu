@@ -16,6 +16,7 @@
 
 namespace Cudimot{
 
+#define VOXELS_BLOCK 8
 #define THREADS_VOXEL 32 // Multiple of 32: Threads collaborating to compute a voxel. Do not change this, otherwise Synchronization will be needed
   
   // Returns the natural log of the 0th order modified Bessel function of first kind for an argument x

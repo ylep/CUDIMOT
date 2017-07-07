@@ -8,7 +8,8 @@
 #
 #  Script to submit 3 jobs: Split_parts, FitModel, Merge_parts  
 
-    
+bindir=$FSLDEVDIR/bin   
+
 Usage() {
     echo ""
     echo "Usage: jobs_wrapper.sh <directory> <processID_to_Wait (can be 'none')> <modelname> <processname> <NJOBS> [options]"

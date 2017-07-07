@@ -129,7 +129,7 @@ int main(int argc, char *argv[]){
   params.writeSamples();
   
   gettimeofday(&t2,NULL);
-  time=timeval_diff(&t2,&t1); 
+  time=timeval_diff(&t2,&t1);
   cout << endl << "Part processed in: " << time << " seconds" << endl;	
   
 }

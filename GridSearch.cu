@@ -14,6 +14,7 @@
 
 namespace Cudimot{
 
+#define VOXELS_BLOCK 8
 #define THREADS_VOXEL 32 // Multiple of 32: Threads collaborating to compute a voxel. Do not change this, otherwise Synchronization will be needed
 
   __constant__ int gridParams [NPARAMS]; // may not use all, but max is NPARAMS

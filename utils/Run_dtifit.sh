@@ -31,5 +31,6 @@ PathDTI=${output}/Dtifit
 ${FSLDEVDIR}/bin/cart2spherical ${PathDTI}/dtifit_V1 ${PathDTI}/dtifit_V1
 ${FSLDEVDIR}/bin/cart2spherical ${PathDTI}/dtifit_V2 ${PathDTI}/dtifit_V2
 
-# f2
+# for f2
+${FSLDIR}/bin/fslmaths ${PathDTI}/dtifit_FA -div 2 ${PathDTI}/dtifit_FA_div2
 ${FSLDIR}/bin/fslmaths ${PathDTI}/dtifit_FA -div 4 ${PathDTI}/dtifit_FA_div4

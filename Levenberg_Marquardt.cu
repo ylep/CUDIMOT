@@ -14,7 +14,9 @@
 
 namespace Cudimot{
 
-#define THREADS_VOXEL 32 // Multiple of 32: Threads collaborating to compute a voxel. Do not change this, otherwise Synchronization will be needed
+#define VOXELS_BLOCK 2
+//#define THREADS_VOXEL 32 // Multiple of 32: Threads collaborating to compute a voxel. Do not change this, otherwise Synchronization will be needed
+//Dynamic
 
 #define CFTOL 1.0e-8
 #define LTOL 1.0e20
@@ -132,7 +134,8 @@ namespace Cudimot{
   }
   
   template <typename T, bool DEBUG>
-  __device__ inline void Cost_Function(int idSubVOX,
+  __device__ inline void Cost_Function(int THREADS_VOXEL,
+				       int idSubVOX,
 				       int nmeas,
 				       int CFP_Tsize,
 				       T* measurements,
@@ -180,7 +183,8 @@ namespace Cudimot{
   }
   
   template <typename T, bool DEBUG>
-  __device__ inline void Calculate_Gradient(int idSubVOX,
+  __device__ inline void Calculate_Gradient(int THREADS_VOXEL,
+					    int idSubVOX,
 					    int nmeas,
 					    int CFP_Tsize,
 					    T* measurements,
@@ -252,7 +256,8 @@ namespace Cudimot{
   }
 
   template <typename T>
-  __device__ inline void Calculate_Hessian(int idSubVOX,
+  __device__ inline void Calculate_Hessian(int THREADS_VOXEL,
+					   int idSubVOX,
 					   int nmeas,
 					   int CFP_Tsize,
 					   T* measurements,
@@ -402,6 +407,7 @@ namespace Cudimot{
   
   template <typename T, bool MARQUARDT, bool DEBUG>
   __global__ void levenberg_kernel(
+				   int THREADS_VOXEL,
 				   int nmeas, // nmeasurements
 				   int CFP_Tsize, // common fixed params: size*M-measurements
 				   int FixP_Tsize, // fixed params: size*Nvoxels 
@@ -499,7 +505,7 @@ namespace Cudimot{
   __syncthreads();
   ///////////////////////////////////////////
 
-  Cost_Function<T,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,CFP,FixP,pcf,debugVOX);
+  Cost_Function<T,DEBUG>(THREADS_VOXEL,idSubVOX,nmeas,CFP_Tsize,meas,params,CFP,FixP,pcf,debugVOX);
   if(DEBUG){
     if(idVOX==debugVOX&&leader){
       printf("--------------------------------------------------------\n");  
@@ -517,8 +523,8 @@ namespace Cudimot{
     }
 
     if(*success){
-      Calculate_Gradient<T,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,params_transf,CFP,FixP,Gradient,debugVOX);
-      Calculate_Hessian(idSubVOX,nmeas,CFP_Tsize,meas,params,params_transf,CFP,FixP,Hessian);
+      Calculate_Gradient<T,DEBUG>(THREADS_VOXEL,idSubVOX,nmeas,CFP_Tsize,meas,params,params_transf,CFP,FixP,Gradient,debugVOX);
+      Calculate_Hessian(THREADS_VOXEL,idSubVOX,nmeas,CFP_Tsize,meas,params,params_transf,CFP,FixP,Hessian);
     }
         
     if(leader){
@@ -560,7 +566,7 @@ namespace Cudimot{
     
     //__threadfence_block();  // params updated
     __syncthreads(); 
-    Cost_Function<T,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,CFP,FixP,ncf,debugVOX);
+    Cost_Function<T,DEBUG>(THREADS_VOXEL,idSubVOX,nmeas,CFP_Tsize,meas,params,CFP,FixP,ncf,debugVOX);
     //__threadfence_block(); // Leader may be faster an update params
     __syncthreads(); 
 
@@ -676,6 +682,9 @@ namespace Cudimot{
     amount_shared_mem += (NPARAMS*VOXELS_BLOCK)*sizeof(T); // step
     
     cout << "Shared Memory used in Levenberg-Marquardt kernel: " << amount_shared_mem << endl;
+
+    int THREADS_VOXEL=32;
+    if(nmeas>200) THREADS_VOXEL=64;
     
     int threads_block = VOXELS_BLOCK * THREADS_VOXEL;
     int nblocks=(nvox/VOXELS_BLOCK);
@@ -683,15 +692,15 @@ namespace Cudimot{
     
     if(!DEBUG){
       if(Marquardt){
-	levenberg_kernel<T,true,false><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+	levenberg_kernel<T,true,false><<<nblocks,threads_block,amount_shared_mem>>>(THREADS_VOXEL,nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
       }else{
-	levenberg_kernel<T,false,false><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+	levenberg_kernel<T,false,false><<<nblocks,threads_block,amount_shared_mem>>>(THREADS_VOXEL,nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
       }
     }else{
       if(Marquardt){
-	levenberg_kernel<T,true,true><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+	levenberg_kernel<T,true,true><<<nblocks,threads_block,amount_shared_mem>>>(THREADS_VOXEL,nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
       }else{
-	levenberg_kernel<T,false,true><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+	levenberg_kernel<T,false,true><<<nblocks,threads_block,amount_shared_mem>>>(THREADS_VOXEL,nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
       }
     }
     sync_check("Levenberg_Marquardt Kernel");

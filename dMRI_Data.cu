@@ -81,8 +81,8 @@ namespace Cudimot{
     // Allocate memory on host and GPU for measurements
     int max_nvox =  max(size_part,size_last_part);
     // number of voxels can be a non-multiple of voxels per block, so somethreads could access to non-allocated memory. We use the closest upper multiple. The added voxels will be ignored.
-    nvoxFit_part=int(max_nvox/VOXELS_BLOCK)*VOXELS_BLOCK;
-    if(max_nvox%VOXELS_BLOCK) nvoxFit_part=nvoxFit_part+VOXELS_BLOCK;
+    nvoxFit_part=int(max_nvox/MAX_VOXELS_BLOCK)*MAX_VOXELS_BLOCK;
+    if(max_nvox%MAX_VOXELS_BLOCK) nvoxFit_part=nvoxFit_part+MAX_VOXELS_BLOCK;
     meas_host=new T[nvoxFit_part*nmeas];
     cudaMalloc((void**)&meas_gpu,nvoxFit_part*nmeas*sizeof(T));
     sync_check("Allocating dMRI_Data on the GPU");

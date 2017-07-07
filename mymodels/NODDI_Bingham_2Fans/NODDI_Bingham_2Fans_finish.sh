@@ -17,7 +17,7 @@ Usage() {
     exit 1
 }
 
-[ "$2" = "" ] && Usage
+[ "$1" = "" ] && Usage
 
 directory=$1
 cd ${directory}
