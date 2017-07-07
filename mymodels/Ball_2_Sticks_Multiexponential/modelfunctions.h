@@ -151,7 +151,7 @@ MACRO void FixConstraintsLM(
 		       int npar, // Number of Parameters to estimate
 		       T* P) // Estimated parameters
 {
- /*if(P[3]<P[6]){	// if f1 < f2 switch sticks
+ if(P[3]<P[6]){	// if f1 < f2 switch sticks
     T tmp=P[3];
     P[3]=P[6];
     P[6]=tmp;
@@ -161,6 +161,6 @@ MACRO void FixConstraintsLM(
     tmp=P[5];
     P[5]=P[8];
     P[8]=tmp;
-  }*/
+  }
 }
 

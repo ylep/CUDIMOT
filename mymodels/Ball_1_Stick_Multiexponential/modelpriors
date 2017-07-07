@@ -8,6 +8,7 @@ bounds[3]=(0,1)
 bounds[4]=(-100,100)
 bounds[5]=(-100,100)
 
+prior[2]=ARD(1.0)
 prior[4]=sin()
 
 
