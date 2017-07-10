@@ -50,7 +50,7 @@ MACRO bool ConstraintsMCMC(
 		       int npar, // Number of Parameters to estimate
 		       T* P) // Estimated parameters
 {
-  if((P[3]+0.06)<P[6]){
+  if((P[3]+0.05)<P[6]){
     //if f1<f2 reject. Let it go a little bit
     return false;
   }
