@@ -10,7 +10,7 @@
 
 bindir=$FSLDEVDIR/bin
 
-modelname=Ball_2_Sticks
+modelname=Ball_1_Stick
 
 make_absolute(){
     dir=$1;
@@ -26,7 +26,7 @@ make_absolute(){
 }
 Usage() {
     echo ""
-    echo "Usage: Pipeline_Ball_2_Sticks.sh <subject_directory> [options]"
+    echo "Usage: Pipeline_Ball_1_Stick.sh <subject_directory> [options]"
     echo ""
     echo "expects to find data and nodif_brain_mask in subject directory"
     echo ""
@@ -146,9 +146,9 @@ dtifit_command="${bindir}/Run_dtifit.sh ${subjdir} ${subjdir}.${modelname} ${bin
 #SGE
 dtifitProcess=`${FSLDIR}/bin/fsl_sub $queue -l $PathDTI/logs -N dtifit $dtifit_command`
 
-####################################################
-################ Ball & 2 Sticks  ##################
-####################################################
+###################################################
+################ Ball & 1 Stick  ##################
+###################################################
 echo "$modelname fitting process"
 
 # Create file to specify initialisation parameters
@@ -158,9 +158,6 @@ echo ${PathDTI}/dtifit_L1.nii.gz >> $InitializationFile # d
 echo ${PathDTI}/dtifit_FA.nii.gz >> $InitializationFile # f1
 echo ${PathDTI}/dtifit_V1_th.nii.gz >> $InitializationFile # th1
 echo ${PathDTI}/dtifit_V1_ph.nii.gz >> $InitializationFile # ph1
-echo ${PathDTI}/dtifit_FA_div4.nii.gz >> $InitializationFile # f2
-echo ${PathDTI}/dtifit_V2_th.nii.gz >> $InitializationFile # th2
-echo ${PathDTI}/dtifit_V2_ph.nii.gz >> $InitializationFile # ph2
 
 partsdir=${subjdir}.${modelname}/diff_parts
 outputdir=${subjdir}.${modelname}

@@ -14,6 +14,7 @@ Usage() {
     echo "expects to find data and nodif_brain_mask in subject directory"
     echo ""
     echo "<options>:"
+    echo "-waitfor (job_ID)"
     echo "-Q (name of the GPU(s) queue, default cuda.q (defined in environment variable: FSLGECUDAQ)"
     echo "-NJOBS (number of jobs to queue, the data is divided in NJOBS parts, usefull for a GPU cluster, default 4)"
     echo "--no_LevMar (Do not run Levenberg-Marquardt)"
@@ -63,11 +64,13 @@ njumps=1250
 sampleevery=25
 other=""
 queue=""
+wait=""
 
 shift
 while [ ! -z "$1" ]
 do
   case "$1" in
+  	  -waitfor) wait="-j $2";shift;;
       -Q) queue="-q $2";shift;;
       -NJOBS) njobs=$2;shift;;
       -b) burnin=$2;shift;;
@@ -136,7 +139,7 @@ echo Pre-processing stage
 	preproc_command="$bindir/split_parts_${modelname} $PreprocOpts"
 
 	#SGE
-	preProcess=`${FSLDIR}/bin/fsl_sub $queue -l ${subjdir}.${modelname}/logs -N ${modelname}_preproc $preproc_command`
+	preProcess=`${FSLDIR}/bin/fsl_sub $wait $queue -l ${subjdir}.${modelname}/logs -N ${modelname}_preproc $preproc_command`
 
 echo Queuing Fitting model processing stage
 

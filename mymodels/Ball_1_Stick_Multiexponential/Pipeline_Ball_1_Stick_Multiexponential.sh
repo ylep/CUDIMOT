@@ -6,9 +6,11 @@
 #
 #   SHCOPYRIGHT
 #
-# Pipeline for fitting NODDI-Bingham - regularization 
+# Pipeline for fitting Ball-1Stick Multiexponential as Bedpostx
 
-bindir=${FSLDEVDIR}/bin
+bindir=$FSLDEVDIR/bin
+modelname=Ball_1_Sticks_Multiexponential
+step1=Ball_1_Stick
 
 make_absolute(){
     dir=$1;
@@ -24,7 +26,7 @@ make_absolute(){
 }
 Usage() {
     echo ""
-    echo "Usage: Pipeline_NODDI_Bingham_Reg_Psi.sh <subject_directory> [options]"
+    echo "Usage: Pipeline_Ball_1_Stick_Multiexponential.sh <subject_directory> [options]"
     echo ""
     echo "expects to find data and nodif_brain_mask in subject directory"
     echo ""
@@ -42,9 +44,6 @@ Usage() {
 
 [ "$1" = "" ] && Usage
 
-modelname=NODDI_Bingham_Reg_Psi
-step1=GS_FixFibreOrientation
-
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${FSLDIR}/lib
 
 subjdir=`make_absolute $1`
@@ -60,7 +59,6 @@ start=`date +%s`
 
 #parse option arguments
 njobs=4
-fudge=1
 burnin=1000
 njumps=1250
 sampleevery=25
@@ -125,8 +123,6 @@ mkdir -p ${subjdir}.${modelname}/${step1}
 mkdir -p ${subjdir}.${modelname}/${step1}/diff_parts
 mkdir -p ${subjdir}.${modelname}/${step1}/logs
 
-part=0
-
 echo Copying files to output directory
 
 ${FSLDIR}/bin/imcp ${subjdir}/nodif_brain_mask ${subjdir}.${modelname}
@@ -135,40 +131,14 @@ if [ `${FSLDIR}/bin/imtest ${subjdir}/nodif` = 1 ] ; then
 fi
 
 # Specify Common Fixed Parameters
+CFP_file=$subjdir.${modelname}/CFP
 cp ${subjdir}/bvecs $subjdir.${modelname}
 cp ${subjdir}/bvals $subjdir.${modelname}
-cp ${subjdir}/bvecs_bvecs $subjdir.${modelname}
-cp ${subjdir}/bvals_bvals $subjdir.${modelname}
-cp ${subjdir}/LR_map $subjdir.${modelname}
-CFP_file_Reg=$subjdir.${modelname}/CFP_Reg
-echo  $subjdir.${modelname}/bvecs_bvecs > $CFP_file_Reg
-echo  $subjdir.${modelname}/bvals_bvals >> $CFP_file_Reg
-echo  $subjdir.${modelname}/LR_map >> $CFP_file_Reg
-CFP_file=$subjdir.${modelname}/CFP
 echo  $subjdir.${modelname}/bvecs > $CFP_file
 echo  $subjdir.${modelname}/bvals >> $CFP_file
 
 #Set more options
-opts_Reg=$opts" --data=${subjdir}/data_dataSM --maskfile=$subjdir.${modelname}/nodif_brain_mask --forcedir --CFP=$CFP_file_Reg"
 opts=$opts" --data=${subjdir}/data --maskfile=$subjdir.${modelname}/nodif_brain_mask --forcedir --CFP=$CFP_file"
-
-# Calculate S0 with the mean of the volumes with bval<50
-bvals=`cat ${subjdir}/bvals`
-mkdir -p ${subjdir}.${modelname}/temporal
-pos=0
-for i in $bvals; do 
-    if [ $i -le 50 ]; then  
-       	fslroi ${subjdir}/data  ${subjdir}.${modelname}/temporal/volume_$pos $pos 1    
-    fi 
-    pos=$(($pos + 1))
-done
-fslmerge -t ${subjdir}.${modelname}/temporal/S0s ${subjdir}.${modelname}/temporal/volume*
-fslmaths ${subjdir}.${modelname}/temporal/S0s -Tmean ${subjdir}.${modelname}/S0
-rm -rf ${subjdir}.${modelname}/temporal
-
-# Specify Fixed parameters: S0
-FixPFile=${subjdir}.${modelname}/FixP
-echo ${subjdir}.${modelname}/S0 >> $FixPFile
 
 ##############################################################################
 ################################ First Dtifit  ###############################
@@ -179,70 +149,49 @@ dtifit_command="${bindir}/Run_dtifit.sh ${subjdir} ${subjdir}.${modelname} ${bin
 #SGE
 dtifitProcess=`${FSLDIR}/bin/fsl_sub $queue -l $PathDTI/logs -N dtifit $dtifit_command`
 
-##############################################################
-################ Grid Search + Fix th & ph ###################
-################### Using normal NODDI_Bingham ###############
-##############################################################
-echo "Queue $step1 process"
+############################################################
+################ Ball & 1 Stick (simple)  ##################
+############################################################
+echo "${step1} fitting process"
 PathStep1=$subjdir.${modelname}/${step1}
-
-# Initialise Psi angle and beta2kappa
-init_command="${bindir}/initialise_Bingham.sh ${bindir} ${PathDTI} ${subjdir}/nodif_brain_mask ${PathStep1}"
-#SGE
-initProcess=`${FSLDIR}/bin/fsl_sub $queue -l $PathStep1/logs -N ${modelname}_initialisation -j $dtifitProcess $init_command`
 
 # Create file to specify initialisation parameters
 InitializationFile=$PathStep1/InitializationParameters
-echo "" > $InitializationFile #fiso
-echo "" >> $InitializationFile #fintra
-echo "" >> $InitializationFile #kappa
-echo "" >> $InitializationFile #beta
-echo ${PathDTI}/dtifit_V1_th.nii.gz >> $InitializationFile #th
-echo ${PathDTI}/dtifit_V1_ph.nii.gz >> $InitializationFile #ph
-echo ${PathStep1}/initialPsi.nii.gz >> $InitializationFile #psi
-
-# Do GridSearch (fiso,fintra,kappa,betta)
-GridFile=$PathStep1/GridSearch
-echo "search[0]=(0.01,0.1,0.2,0.3,0.8)" > $GridFile #fiso
-echo "search[1]=(0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0)" >> $GridFile #fintra
-echo "search[2]=(1,2,3,6,10,15,30,40,50)" >> $GridFile #kappa
-echo "search[3]=(0.9,5,8,14,29,38)" >> $GridFile #beta
+echo ${PathDTI}/dtifit_S0.nii.gz  > $InitializationFile # S0
+echo ${PathDTI}/dtifit_L1.nii.gz >> $InitializationFile # d  // empirically found that d~L1
+echo ${PathDTI}/dtifit_FA.nii.gz >> $InitializationFile # f1
+echo ${PathDTI}/dtifit_V1_th.nii.gz >> $InitializationFile # th1
+echo ${PathDTI}/dtifit_V1_ph.nii.gz >> $InitializationFile # ph1
 
 partsdir=$PathStep1/diff_parts
 outputdir=$PathStep1
-Step1Opts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --gridSearch=$GridFile --init_params=$InitializationFile --fixed=4,5"
+Step1Opts=$opts" --outputdir=$outputdir --partsdir=$partsdir --init_params=$InitializationFile"
 
-postproc=`${bindir}/jobs_wrapper.sh $PathStep1 $initProcess NODDI_Bingham GS $njobs $Step1Opts`
-
-######################################################################################
-######################### Fit all the parameters of the Model ########################
-######################################################################################
-echo "Queue Fitting process"
+postproc=`${bindir}/jobs_wrapper.sh $PathStep1 $dtifitProcess $step1 Fit $njobs $Step1Opts`
+###############################################################
+############ Ball & 1 Stick - Multiexponential ###############
+###############################################################
+echo "$modelname fitting process"
 
 # Create file to specify initialization parameters
 InitializationFile=$subjdir.${modelname}/InitializationParameters
-echo $PathStep1/Param_0_samples > $InitializationFile #fiso
-echo $PathStep1/Param_1_samples >> $InitializationFile #fintra
-echo $PathStep1/Param_2_samples >> $InitializationFile #kappa
-echo $PathStep1/Param_3_samples >> $InitializationFile #beta
-echo $PathStep1/Param_4_samples >> $InitializationFile #th
-echo $PathStep1/Param_5_samples >> $InitializationFile #ph
-echo $PathStep1/Param_6_samples >> $InitializationFile #psi
-echo $PathStep1/Param_0_samples >> $InitializationFile #LR_fiso
-echo $PathStep1/Param_1_samples >> $InitializationFile #LR_fintra
-echo $PathStep1/Param_2_samples >> $InitializationFile #LR_kappa
-echo $PathStep1/Param_3_samples >> $InitializationFile #LR_beta
+echo $PathStep1/Param_0_samples > $InitializationFile # S0
+echo $PathStep1/Param_1_samples >> $InitializationFile # d
+echo $PathStep1/Param_1_samples >> $InitializationFile # d_std = d
+echo $PathStep1/Param_2_samples >> $InitializationFile # f1
+echo $PathStep1/Param_3_samples >> $InitializationFile # th1
+echo $PathStep1/Param_4_samples >> $InitializationFile # ph1
 
 
 partsdir=${subjdir}.${modelname}/diff_parts
 outputdir=${subjdir}.${modelname}
-ModelOpts=$opts_Reg" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --init_params=$InitializationFile $lastStepModelOpts"
+ModelOpts=$opts" --outputdir=$outputdir --partsdir=$partsdir --init_params=$InitializationFile $lastStepModelOpts"
 
 postproc=`${bindir}/jobs_wrapper.sh ${subjdir}.${modelname} $postproc $modelname FitProcess $njobs $ModelOpts`
 
 #########################################
-### Calculate Dispersion Index & dyads ###
-##########################################
+############## PostProc #################
+#########################################
 finish_command="${bindir}/${modelname}_finish.sh ${subjdir}.${modelname}"
 #SGE
 finishProcess=`${FSLDIR}/bin/fsl_sub $queue -l ${subjdir}.${modelname}/logs -N ${modelname}_finish -j $postproc $finish_command`
