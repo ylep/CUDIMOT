@@ -49,7 +49,7 @@ MACRO T Calculate_IntraCellular(T* P,
   // Calculate Signal from IntraCellular compartment //
 
   T parComp =-CFP[3]*Dparallel; // Parallel component: -bval * dintra
-  // Radius us 0, so no Perpendicular Component
+  // Radius is 0, so no Perpendicular Component
 
   // Compute Legendre weighted signal
   T lgi[7]; // legendre  gaussian integral

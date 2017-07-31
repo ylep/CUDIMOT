@@ -35,7 +35,7 @@ Usage() {
     echo "-b (burnin period, default 5000)"
     echo "-j (number of jumps, default 1250)"
     echo "-s (sample every, default 25)"
-    echo "--BIC (if you want to calculate BIC)"
+    echo "--BIC_AIC (calculate BIC & AIC)"
     echo ""
     exit 1
 }
@@ -77,7 +77,7 @@ do
       -j) njumps=$2;shift;;
       -s) sampleevery=$2;shift;;
       --runMCMC) lastStepModelOpts=$lastStepModelOpts" --runMCMC";;
-      --BIC) lastStepModelOpts=$lastStepModelOpts" --BIC";;
+      --BIC_AIC) lastStepModelOpts=$lastStepModelOpts" --BIC_AIC";;
       *) other=$other" "$1;;
   esac
   shift
@@ -194,10 +194,10 @@ echo ${PathStep1}/initialPsi.nii.gz >> $InitializationFile #psi
 
 # Do GridSearch (fiso,fintra,kappa,betta)
 GridFile=$PathStep1/GridSearch
-echo "search[0]=(0.01,0.1,0.2,0.3,0.8)" > $GridFile #fiso
-echo "search[1]=(0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0)" >> $GridFile #fintra
-echo "search[2]=(1,2,3,6,10,15,30,40,50)" >> $GridFile #kappa
-echo "search[3]=(0.9,5,8,14,29,38)" >> $GridFile #beta
+echo "search[0]=(0.0,0.05,0.1,0.2,0.3)" > $GridFile #fiso
+echo "search[1]=(0.3,0.5,0.6,0.7,0.75,0.8,0.85,0.9,0.95,1.0)" >> $GridFile #fintra
+echo "search[2]=(0.5,1,2,3,4,5,6,7,8,10,12,15,20,25,30,40,50)" >> $GridFile #kappa
+echo "search[3]=(0.2,0.5,1.0,1.5,2.0,2.5,3.0,4.5,6.5,9,12,16,20)" >> $GridFile #beta
 
 partsdir=$PathStep1/diff_parts
 outputdir=$PathStep1
@@ -206,7 +206,7 @@ Step1Opts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --
 postproc=`${bindir}/jobs_wrapper.sh $PathStep1 $initProcess $modelname GS $njobs $Step1Opts`
 
 ######################################################################################
-######################### Fit all the parameters of the Model ########################
+########### Fit all the parameters of the Model excepts Fiso (fixed )#################
 ######################################################################################
 echo "Queue Fitting process"
 
@@ -222,7 +222,7 @@ echo $PathStep1/Param_6_samples >> $InitializationFile #psi
 
 partsdir=${subjdir}.${modelname}/diff_parts
 outputdir=${subjdir}.${modelname}
-ModelOpts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --init_params=$InitializationFile $lastStepModelOpts"
+ModelOpts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --init_params=$InitializationFile $lastStepModelOpts --fixed=0"
 
 postproc=`${bindir}/jobs_wrapper.sh ${subjdir}.${modelname} $postproc $modelname FitProcess $njobs $ModelOpts`
 

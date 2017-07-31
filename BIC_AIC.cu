@@ -100,9 +100,9 @@ namespace Cudimot{
     if(idSubVOX==0){
       if(RICIAN_NOISE){
 	np++;
-	*BIC = -nmeas*log_gpu(*tau)-accumulated_error;
+	*BIC = nmeas*log_gpu(*tau)+accumulated_error;
       }else{
-	*BIC = (nmeas/(T)2.0)*log_gpu(accumulated_error/(T)2.0);
+	*BIC = -(nmeas/(T)2.0)*log_gpu(accumulated_error/(T)2.0);
       }
       *AIC = (T)-2.0 * (*BIC) + np * (T)2.0;
       *BIC = (T)-2.0 * (*BIC) + np * log_gpu((T)nmeas);
@@ -160,8 +160,8 @@ namespace Cudimot{
     if(leader){ 
       *TAU=(T)0.0;
       if(nsamples>1){
-	T value=(T)0.0;
 	for(int par=0;par<NPARAMS;par++){
+	  T value=(T)0.0;
 	  for(int samp=0;samp<nsamples;samp++){
 	    value+= samples[par*nsamples+samp];
 	  }

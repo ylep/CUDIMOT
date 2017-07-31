@@ -6,7 +6,7 @@
 #
 #   SHCOPYRIGHT
 #
-# Pipeline for fitting Ball&Racket (only one D)
+# Pipeline for fitting Ball & Racket (fits D)
 
 bindir=${FSLDEVDIR}/bin
 
@@ -24,7 +24,7 @@ make_absolute(){
 }
 Usage() {
     echo ""
-    echo "Usage: Pipeline_Ball_1_Racket_uniqueD.sh <subject_directory> [options]"
+    echo "Usage: Pipeline_Ball_1_Racket.sh <subject_directory> [options]"
     echo ""
     echo "expects to find data and nodif_brain_mask in subject directory"
     echo ""
@@ -35,7 +35,7 @@ Usage() {
     echo "-b (burnin period, default 5000)"
     echo "-j (number of jumps, default 1250)"
     echo "-s (sample every, default 25)"
-    echo "--BIC (if you want to calculate BIC)"
+    echo "--BIC_AIC (calculate BIC & AIC)"
     echo ""
     exit 1
 }
@@ -77,7 +77,7 @@ do
       -j) njumps=$2;shift;;
       -s) sampleevery=$2;shift;;
       --runMCMC) lastStepModelOpts=$lastStepModelOpts" --runMCMC";;
-      --BIC) lastStepModelOpts=$lastStepModelOpts" --BIC";;
+      --BIC_AIC) lastStepModelOpts=$lastStepModelOpts" --BIC_AIC";;
       *) other=$other" "$1;;
   esac
   shift
@@ -194,9 +194,9 @@ echo ${PathStep1}/initialPsi.nii.gz >> $InitializationFile #psi
 # Do GridSearch (fiso,fintra,kappa,betta)
 GridFile=$PathStep1/GridSearch
 echo "search[0]=(0.002)" > $GridFile #d
-echo "search[1]=(0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0)" >> $GridFile #faniso
-echo "search[2]=(1,2,3,6,8,10,12,15,20,30,40,50)" >> $GridFile #kappa
-echo "search[3]=(0.3,0.9,1.5,2.5,5.5,7.5,14,29,38)" >> $GridFile #beta
+echo "search[1]=(0.2,0.5,0.65,0.7,0.75,0.8,0.9,0.95,1.0)" >> $GridFile #faniso
+echo "search[2]=(0.5,1,2,3,4,5,6,7,8,10,12,15,20,25,30,40,50)" >> $GridFile #kappa
+echo "search[3]=(0.2,0.4,0.9,1.5,2.5,3.5,4.5,5.5,6.5,7.5,9,11.5,14,17,24,29,38,48)" >> $GridFile #beta
 
 
 partsdir=$PathStep1/diff_parts

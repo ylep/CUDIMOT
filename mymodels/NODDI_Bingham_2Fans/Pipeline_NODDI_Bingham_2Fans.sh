@@ -6,7 +6,7 @@
 #
 #   SHCOPYRIGHT
 #
-# Pipeline for fitting NODDI-Bingham 2 Fans
+# Pipeline for fitting NODDI-Bingham-2Fans
 
 bindir=${FSLDEVDIR}/bin
 
@@ -60,7 +60,6 @@ start=`date +%s`
 
 #parse option arguments
 njobs=4
-fudge=1
 burnin=1000
 njumps=1250
 sampleevery=25
@@ -171,9 +170,11 @@ dtifit_command="${bindir}/Run_dtifit.sh ${subjdir} ${subjdir}.${modelname} ${bin
 #SGE
 dtifitProcess=`${FSLDIR}/bin/fsl_sub $queue -l $PathDTI/logs -N dtifit $dtifit_command`
 
-## Model Parameters: fiso, fintra, kappa, beta, th, ph  psi ##
+## Model Parameters: fiso, fFan2
+## fintra1, kappa1, beta1, th1, ph1, psi1
+## fintra2, kappa2, beta2, th2, ph2, psi2
 ##############################################################
-################ Grid Search + Fix th & ph ###################
+######## Grid Search + Fix th1 & ph1 & th2 & ph2 #############
 ##############################################################
 echo "Queue $step1 process"
 PathStep1=$subjdir.${modelname}/${step1}
@@ -186,60 +187,63 @@ initProcess=`${FSLDIR}/bin/fsl_sub $queue -l $PathStep1/logs -N ${modelname}_ini
 # Create file to specify initialisation parameters
 InitializationFile=$PathStep1/InitializationParameters
 echo "" > $InitializationFile #fiso
-echo "" >> $InitializationFile #fintra
-echo "" >> $InitializationFile #ffib2
+echo "" >> $InitializationFile #fFan2
+echo "" >> $InitializationFile #fintra1
 echo "" >> $InitializationFile #kappa1
 echo "" >> $InitializationFile #beta1
-echo ${PathDTI}/dtifit_V1_th.nii.gz >> $InitializationFile #th
-echo ${PathDTI}/dtifit_V1_ph.nii.gz >> $InitializationFile #ph
-echo ${PathStep1}/initialPsi.nii.gz >> $InitializationFile #psi
+echo ${PathDTI}/dtifit_V1_th.nii.gz >> $InitializationFile #th1
+echo ${PathDTI}/dtifit_V1_ph.nii.gz >> $InitializationFile #ph1
+echo ${PathStep1}/initialPsi.nii.gz >> $InitializationFile #psi1
+echo "" >> $InitializationFile #fintra2
 echo "" >> $InitializationFile #kappa2
 echo "" >> $InitializationFile #beta2
 echo ${PathDTI}/dtifit_V2_th.nii.gz >> $InitializationFile #th2
 echo ${PathDTI}/dtifit_V2_ph.nii.gz >> $InitializationFile #ph2
-echo "" >> $InitializationFile #psi2
+echo ${PathStep1}/initialPsi.nii.gz >> $InitializationFile #psi2
 
 # Do GridSearch (fiso,fintra,kappa,betta)
 GridFile=$PathStep1/GridSearch
-echo "search[0]=(0.01,0.1,0.3,0.8)" > $GridFile #fiso
-echo "search[1]=(0.3,0.4,0.5,0.6,0.8,0.9,1.0)" >> $GridFile #fintra
-echo "search[2]=(0.1,0.2,0.3)" >> $GridFile #ffib2
-echo "search[3]=(1,2,3,6,10,15,30,40,50)" >> $GridFile #kappa1
-echo "search[4]=(0.9,5,8,14,29,38)" >> $GridFile #beta1
-echo "search[8]=(1,2,3,6,10,15,30,40,50)" >> $GridFile #kappa2
-echo "search[9]=(0.9,5,8,14,29,38)" >> $GridFile #beta2
+echo "search[0]=(0.0,0.05,0.1,0.3)" > $GridFile #fiso
+echo "search[1]=(0.49)" > $GridFile #fiso
+echo "search[2]=(0.3,0.6,0.75,0.8,0.85,0.9,0.95,1.0)" >> $GridFile #fintra1
+echo "search[3]=(0.5,1,3,5,7,9,12,15,20,30,40,50)" >> $GridFile #kappa1
+echo "search[4]=(0.2,0.5,0.9,2,3,6,9)" >> $GridFile #beta1
+echo "search[8]=(0.3,0.6,0.8,1.0)" >> $GridFile #fintra2
+echo "search[9]=(0.5,1,3,5,7,9,12,15,20,30,40,50)" >> $GridFile #kappa2
+echo "search[10]=(0.2,0.5,0.9,2,3,6,9)" >> $GridFile #beta2
+
 
 partsdir=$PathStep1/diff_parts
 outputdir=$PathStep1
-Step1Opts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --gridSearch=$GridFile --init_params=$InitializationFile --fixed=5,6,10,11"
+Step1Opts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --gridSearch=$GridFile --init_params=$InitializationFile --fixed=1,5,6,11,12"
 
 postproc=`${bindir}/jobs_wrapper.sh $PathStep1 $initProcess $modelname GS $njobs $Step1Opts`
 
 ######################################################################################
-######################### Fit all the parameters of the Model ########################
+################## Fit all the parameters of the Model exepts Fiso ###################
 ######################################################################################
 echo "Queue Fitting process"
 
 # Create file to specify initialization parameters (5 parameters: fiso,fintra,kappa,th,ph)
 InitializationFile=$subjdir.${modelname}/InitializationParameters
 echo $PathStep1/Param_0_samples > $InitializationFile #fiso
-echo $PathStep1/Param_1_samples >> $InitializationFile #fintra
-echo $PathStep1/Param_2_samples >> $InitializationFile #ffib2
+echo $PathStep1/Param_1_samples >> $InitializationFile #fFan2
+echo $PathStep1/Param_2_samples >> $InitializationFile #fintra1
 echo $PathStep1/Param_3_samples >> $InitializationFile #kappa1
 echo $PathStep1/Param_4_samples >> $InitializationFile #beta1
 echo $PathStep1/Param_5_samples >> $InitializationFile #th1
 echo $PathStep1/Param_6_samples >> $InitializationFile #ph1
 echo $PathStep1/Param_7_samples >> $InitializationFile #psi1
-echo $PathStep1/Param_8_samples >> $InitializationFile #kappa2
-echo $PathStep1/Param_9_samples >> $InitializationFile #beta2
-echo $PathStep1/Param_10_samples >> $InitializationFile #th2
-echo $PathStep1/Param_11_samples >> $InitializationFile #ph2
-echo $PathStep1/Param_12_samples >> $InitializationFile #psi2
-
+echo $PathStep1/Param_8_samples >> $InitializationFile #fintra2
+echo $PathStep1/Param_9_samples >> $InitializationFile #kappa2
+echo $PathStep1/Param_10_samples >> $InitializationFile #beta2
+echo $PathStep1/Param_11_samples >> $InitializationFile #th2
+echo $PathStep1/Param_12_samples >> $InitializationFile #ph2
+echo $PathStep1/Param_13_samples >> $InitializationFile #psi2
 
 partsdir=${subjdir}.${modelname}/diff_parts
 outputdir=${subjdir}.${modelname}
-ModelOpts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --init_params=$InitializationFile $lastStepModelOpts"
+ModelOpts=$opts" --outputdir=$outputdir --partsdir=$partsdir --FixP=$FixPFile --init_params=$InitializationFile $lastStepModelOpts --fixed=0"
 
 postproc=`${bindir}/jobs_wrapper.sh ${subjdir}.${modelname} $postproc $modelname FitProcess $njobs $ModelOpts`
 

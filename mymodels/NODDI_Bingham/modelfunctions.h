@@ -153,8 +153,8 @@ MACRO bool ConstraintsMCMC(
 		       int npar, // Number of Parameters to estimate
 		       T* P) // Estimated parameters
 {
-  if(P[2]<P[3]){
-    // kappa < beta
+  if((P[2]-0.05)<P[3]){
+    // if (kappa-0.1) < beta
     return false;
   }
   return true;
@@ -214,7 +214,7 @@ MACRO void FixConstraintsLM(
 {
   if(P[2]<P[3]){
     // kappa < beta
-    P[3]=P[2];
+    P[3]=P[2]-0.05;
   }
 }
 

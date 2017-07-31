@@ -756,7 +756,7 @@ namespace Cudimot{
     cudaMalloc((void**)&randStates, blocks_Rand*256*sizeof(curandState));
     dim3 Dim_Grid_Rand(blocks_Rand,1);
     dim3 Dim_Block_Rand(256,1);
-    srand(opts.seed.value());  //randoms seed
+    srand(opts.seed.value()+opts.idPart.value());  //randoms seed
     setup_randoms_kernel<<<Dim_Grid_Rand,Dim_Block_Rand>>>(randStates,rand());
     sync_check("Setup_Randoms_kernel");
   }

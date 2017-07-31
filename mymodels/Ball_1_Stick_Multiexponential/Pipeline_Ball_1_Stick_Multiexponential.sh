@@ -9,7 +9,7 @@
 # Pipeline for fitting Ball-1Stick Multiexponential as Bedpostx
 
 bindir=$FSLDEVDIR/bin
-modelname=Ball_1_Sticks_Multiexponential
+modelname=Ball_1_Stick_Multiexponential
 step1=Ball_1_Stick
 
 make_absolute(){
@@ -37,7 +37,7 @@ Usage() {
     echo "-b (burnin period, default 5000)"
     echo "-j (number of jumps, default 1250)"
     echo "-s (sample every, default 25)"
-    echo "--BIC (if you want to calculate BIC)"
+    echo "--BIC_AIC (calculate BIC & AIC)"
     echo ""
     exit 1
 }
@@ -76,7 +76,7 @@ do
       -j) njumps=$2;shift;;
       -s) sampleevery=$2;shift;;
       --runMCMC) lastStepModelOpts=$lastStepModelOpts" --runMCMC";;
-      --BIC) lastStepModelOpts=$lastStepModelOpts" --BIC";;
+      --BIC_AIC) lastStepModelOpts=$lastStepModelOpts" --BIC_AIC";;
       *) other=$other" "$1;;
   esac
   shift
