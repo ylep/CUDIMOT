@@ -7,6 +7,7 @@
 // P[0]: a
 // P[1]: b
 // CFP[0]: Xs
+// f(x) = a * exp(-b*x)
 
 MACRO T Predicted_Signal(
 			 int npar, 	// Number of Parameters to estimate
@@ -14,7 +15,7 @@ MACRO T Predicted_Signal(
 			 T* CFP, 	// Fixed Parameters common to all the voxels
 			 T* FixP) 	// Fixed Parameters for each voxel
 {
-  return exp_gpu(-P[0]*CFP[0])*P[1];
+  return P[0]*exp_gpu(-P[1]*CFP[0]);
 }
 
 // Constraints checked during MCMC (if MCMC is used)
@@ -40,8 +41,10 @@ MACRO void Partial_Derivatives(
 			       T* FixP, // Fixed Parameters for each voxel
 			       T* derivatives) // Derivative respect each model estimated parameter
 {
-	derivatives[0]=NUMERICAL(0);
-	derivatives[1]=NUMERICAL(1);
+  derivatives[0]=exp_gpu(-P[1]*CFP[0]);
+  derivatives[1]=-P[0]*CFP[0]*exp_gpu(-P[1]*CFP[0]);
+  //derivatives[0]=NUMERICAL(0);
+  //derivatives[1]=NUMERICAL(1);
 
 }
 

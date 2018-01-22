@@ -28,7 +28,7 @@ mv $directory/Param_4_samples.nii.gz $directory/ph_samples.nii.gz
 
 Two_div_pi=0.636619772367581
 
-${FSLDIR}/bin/fslmaths ${OUTdir}/kappa_samples -mul 10 ${OUTdir}/kappa_samples
+#${FSLDIR}/bin/fslmaths ${directory}/kappa_samples -mul 10 ${directory}/kappa_samples
 
 $FSLDIR/bin/fslmaths $directory/fiso_samples.nii.gz -Tmean $directory/mean_fiso
 $FSLDIR/bin/fslmaths $directory/fintra_samples.nii.gz -Tmean $directory/mean_fintra
