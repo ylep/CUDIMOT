@@ -28,8 +28,8 @@ ${FSLDIR}/bin/dtifit -k ${subjdir}/data -m ${subjdir}/nodif_brain_mask -r ${subj
 PathDTI=${output}/Dtifit
 
 # calculate Spherical Coordinates: th1 and ph1
-${FSLDEVDIR}/bin/cart2spherical ${PathDTI}/dtifit_V1 ${PathDTI}/dtifit_V1
-${FSLDEVDIR}/bin/cart2spherical ${PathDTI}/dtifit_V2 ${PathDTI}/dtifit_V2
+${bindir}/cart2spherical ${PathDTI}/dtifit_V1 ${PathDTI}/dtifit_V1
+${bindir}/cart2spherical ${PathDTI}/dtifit_V2 ${PathDTI}/dtifit_V2
 
 # for f2
 ${FSLDIR}/bin/fslmaths ${PathDTI}/dtifit_FA -div 2 ${PathDTI}/dtifit_FA_div2
