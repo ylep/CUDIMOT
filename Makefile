@@ -36,7 +36,14 @@ SM_50 = -gencode arch=compute_50,code=sm_50
 SM_52 = -gencode arch=compute_52,code=sm_52
 SM_60 = -gencode arch=compute_60,code=sm_60
 SM_61 = -gencode arch=compute_61,code=sm_61
-GPU_CARDS = $(SM_37) $(SM_35)
+SM_70 = -gencode arch=compute_70,code=sm_70
+
+#for Realease
+GPU_CARDS = $(SM_30) $(SM_35) $(SM_37) $(SM_50) $(SM_52) 
+#$(SM_60) $(SM_61)
+
+#for FMRIB
+#GPU_CARDS = $(SM_37) $(SM_35)
 
 PROJNAME = CUDIMOT
 
