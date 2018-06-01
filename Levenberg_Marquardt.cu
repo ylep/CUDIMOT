@@ -21,10 +21,10 @@ namespace Cudimot{
 #define CFTOL 1.0e-8
 #define LTOL 1.0e20
 #define EPS_gpu 2.0e-16 //Losely based on NRinC 20.1
-#define TwoDivPI 0.636619772367581
-#define PIDivTwo 1.5707962 // 1.57079632679
+#define TwoDivPI 0.636619772367581 //0.6353  // 0.636619772367581
 #define avoidErrors 1e-4 // Avoid maximum and minimums because tan(pi/2) is undefined to inf
-  
+#define SpeedFactor 10 // Speed of Transformations-function
+
   __constant__ int LMbound_types [NPARAMS];
   __constant__ float LMbounds_min [NPARAMS];
   __constant__ float LMbounds_max [NPARAMS];
@@ -43,13 +43,13 @@ namespace Cudimot{
 
     transfParams[idpar] = params[idpar]-(((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
     transfParams[idpar] *= ((T)2.0/(((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])*(T)TwoDivPI));
-    transfParams[idpar] = tan_gpu(transfParams[idpar]);
+    transfParams[idpar] = tan_gpu(transfParams[idpar])*SpeedFactor;
   }
   
   template <typename T>
   __device__ inline void MinMaxTransform(int idpar, T* params, T* transfParams){ 
     params[idpar] = (((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])/(T)2.0);
-    params[idpar] *= atan_gpu(transfParams[idpar]);
+    params[idpar] *= atan_gpu(transfParams[idpar]/SpeedFactor);
     params[idpar] *=  (T)TwoDivPI;
     params[idpar] += (((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
 
@@ -57,13 +57,13 @@ namespace Cudimot{
       params[idpar]+=(T)avoidErrors;
       transfParams[idpar] = params[idpar]-(((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
       transfParams[idpar] *= ((T)2.0/(((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])*(T)TwoDivPI));
-      transfParams[idpar] = tan_gpu(transfParams[idpar]);
+      transfParams[idpar] = tan_gpu(transfParams[idpar])*SpeedFactor;
     }
     if(params[idpar]>=((T)LMbounds_max[idpar]-(T)avoidErrors)){ 
       params[idpar]-=(T)avoidErrors;
       transfParams[idpar] = params[idpar]-(((T)LMbounds_min[idpar]+(T)LMbounds_max[idpar])/(T)2.0);
       transfParams[idpar] *= ((T)2.0/(((T)LMbounds_max[idpar]-(T)LMbounds_min[idpar])*(T)TwoDivPI));
-      transfParams[idpar] = tan_gpu(transfParams[idpar]);
+      transfParams[idpar] = tan_gpu(transfParams[idpar])*SpeedFactor;
     }
     // Avoid maximum and minimum because tan(pi/2) is undefined to inf
   }
@@ -127,7 +127,8 @@ namespace Cudimot{
       else if(LMbound_types[p]==BMAX)
 	derivatives[p]=derivatives[p]*(-exp_gpu(transfParams[p]));
       else if(LMbound_types[p]==BMINMAX){
-	derivatives[p]=derivatives[p]*((LMbounds_max[p]-LMbounds_min[p])/(T)2.0)*((T)1.0/((T)1.0+(transfParams[p]*transfParams[p])))*(T)TwoDivPI;
+	derivatives[p]=derivatives[p]*((LMbounds_max[p]-LMbounds_min[p])/(T)2.0)*(T)TwoDivPI;
+	derivatives[p]=derivatives[p]* ((T)SpeedFactor/ ((T)SpeedFactor*(T)SpeedFactor + transfParams[p]*transfParams[p]));
       }
       //else keep the same
     }

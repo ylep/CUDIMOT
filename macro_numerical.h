@@ -1,7 +1,7 @@
 #define MACRO template <typename T> __device__ inline
 #define NUMERICAL(idpar) numerical(idpar,P,CFP,FixP);
 //Used for numerical differentiation
-#define TINY 1e-5      
+#define TINY 1e-5    
 #define MAXSTEP 0.2
 #define MINSTEP 1e-6
 #define nonzerosign(a) ((a)<0?-1:1)
