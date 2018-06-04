@@ -78,8 +78,8 @@ namespace Cudimot{
     if(DEBUG){
       int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
       if(idVOX==debugVOX){
-	printf("----\n",par,params[par]);
-	printf("Proposing Value for Parameter_%i: %f\n",par,params[par]);	
+	      printf("----\n",par,params[par]);
+	      printf("Proposing Value for Parameter_%i: %f\n",par,params[par]);	
       }
     }
   }
@@ -95,42 +95,45 @@ namespace Cudimot{
 
 
   template <typename T>
-  __device__ inline void Initialize_priors_params(T* params, T* priors){
+  __device__ inline void Initialize_priors_params(T* params, T* priors, int nmeas, T* CFP, T* FixP){
     #pragma unroll
     for(int p=0;p<NPARAMS;p++){
       if(MCbound_types[p]==BMIN){
-	// Bounded with only min
-	if (params[p] < MCbounds_min[p]) 
-	  params[p]=MCbounds_min[p];
+	      // Bounded with only min
+	      if (params[p] < MCbounds_min[p]) 
+	        params[p]=MCbounds_min[p];
       }else if(MCbound_types[p]==BMAX){
-	// Bounded with only max
-	if (params[p] > MCbounds_max[p])
-	  params[p]=MCbounds_max[p];
+	      // Bounded with only max
+	      if (params[p] > MCbounds_max[p])
+	        params[p]=MCbounds_max[p];
       }else if(MCbound_types[p]==BMINMAX){
-	// Bounded with min & max
-	if (params[p] < MCbounds_min[p])
-	  params[p]=MCbounds_min[p];
-	else if (params[p] > MCbounds_max[p])
-	  params[p]=MCbounds_max[p];
+	      // Bounded with min & max
+	      if (params[p] < MCbounds_min[p])
+	        params[p]=MCbounds_min[p];
+	      else if (params[p] > MCbounds_max[p])
+	      params[p]=MCbounds_max[p];
       }
       // Initialise priors
       if(MCprior_types[p]==1){
-	// Gaussian(mean,std)
-	T std2= MCpriors_b[p]*MCpriors_b[p]; //variance*variance
-	priors[p]=(params[p]-MCpriors_a[p])*(params[p]-MCpriors_a[p])/(2*std2);
-	//prior=(param-mean)*(param-mean)/(2*var*var)
+	      // Gaussian(mean,std)
+	      T std2= MCpriors_b[p]*MCpriors_b[p]; //variance*variance
+	      priors[p]=(params[p]-MCpriors_a[p])*(params[p]-MCpriors_a[p])/(2*std2);
+	      //prior=(param-mean)*(param-mean)/(2*var*var)
       }else if(MCprior_types[p]==2){
-	// Gamma(alpha,beta)
-	priors[p]= ((T)1.0-MCpriors_a[p])* log_gpu(params[p]) + MCpriors_b[p]*params[p];
+	      // Gamma(alpha,beta)
+	      priors[p]= ((T)1.0-MCpriors_a[p])* log_gpu(params[p]) + MCpriors_b[p]*params[p];
       }else if(MCprior_types[p]==3){
-	// ARD(fudge_factor)
-	priors[p]=MCpriors_a[p]*log_gpu(params[p]);
-	//fudgefactor*log(param)
+	      // ARD(fudge_factor)
+	      priors[p]=MCpriors_a[p]*log_gpu(params[p]);
+	      //fudgefactor*log(param)
       }else if(MCprior_types[p]==4){
-	// sin()
-	priors[p]=-log_gpu(fabs_gpu(sin_gpu(params[p])/(T)2.0));
+	      // sin()
+        priors[p]=-log_gpu(fabs_gpu(sin_gpu(params[p])/(T)2.0));
+      }else if(MCprior_types[p]==5){
+	      // custom() .. defined by the user in modelfunctions.h
+	      priors[p]=custom_priors(p,params,nmeas,CFP,FixP);  
       }else{
-	priors[p]=0;
+	      priors[p]=0;
       }
     }
   }
@@ -157,9 +160,8 @@ namespace Cudimot{
    }
 
   template <typename T>
-  __device__ inline void Compute_prior(int idpar, T* params, T* priors, T* old_prior){
+  __device__ inline void Compute_prior(int idpar, T* params, T* priors, T* old_prior, int nmeas, T* CFP, T* FixP){
     *old_prior = priors[idpar];
-
     if(MCprior_types[idpar]==GAUSSPRIOR){
       // Gaussian(mean,std)
       T std2= MCpriors_b[idpar]*MCpriors_b[idpar]; //std*std
@@ -178,6 +180,10 @@ namespace Cudimot{
     }else if(MCprior_types[idpar]==SINPRIOR){
       // sin()
       priors[idpar]=-log_gpu(fabs_gpu(sin_gpu(params[idpar])/(T)2.0));
+
+    }else if(MCprior_types[idpar]==CUSTOM){
+      // custom() .. defined by the user in modelfunctions.h
+      priors[idpar]=custom_priors(idpar,params,nmeas,CFP,FixP);  
 
     }else{
       priors[idpar]=0;
@@ -267,19 +273,19 @@ namespace Cudimot{
       T pred_error=Predicted_Signal(NPARAMS,parameters,myCFP,FixP);
 
       if(DEBUG){
-	int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
-	if(idVOX==debugVOX && idSubVOX==0){
-	  printf("PredictedSignal[%i]: %f\n",idMeasurement,pred_error);
-	}
+	      int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
+	      if(idVOX==debugVOX && idSubVOX==0){
+	        printf("PredictedSignal[%i]: %f\n",idMeasurement,pred_error);
+	      }
       }
 
       if(RICIAN_NOISE){
-	T meas = measurements[idMeasurement];
-	pred_error=log_gpu(meas)+(-(T)0.5*(*tau)*(meas*meas+pred_error*pred_error)+logIo((*tau)*pred_error*meas));
-	accumulated_error+=pred_error;
+	      T meas = measurements[idMeasurement];
+	      pred_error=log_gpu(meas)+(-(T)0.5*(*tau)*(meas*meas+pred_error*pred_error)+logIo((*tau)*pred_error*meas));
+	      accumulated_error+=pred_error;
       }else{
-	pred_error=pred_error-measurements[idMeasurement];
-	accumulated_error+=pred_error*pred_error;
+	      pred_error=pred_error-measurements[idMeasurement];
+	      accumulated_error+=pred_error*pred_error;
       }
 
       idMeasurement+=THREADS_VOXEL;
@@ -293,9 +299,9 @@ namespace Cudimot{
         
     if(idSubVOX==0){
       if(RICIAN_NOISE){
-	*likelihood = -nmeas*log_gpu(*tau)-accumulated_error;
+	      *likelihood = -nmeas*log_gpu(*tau)-accumulated_error;
       }else{
-	*likelihood = (nmeas/(T)2.0)*log_gpu(accumulated_error/(T)2.0);
+	      *likelihood = (nmeas/(T)2.0)*log_gpu(accumulated_error/(T)2.0);
       }
     }
   }
@@ -310,7 +316,7 @@ namespace Cudimot{
     if(DEBUG){
       int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
       if(idVOX==debugVOX){
-	printf("OldEnergy(%f), Likelihood(%f) Prior(%f) NewEnergy(%f)\n",*old_energy,*likelihood,*prior,*new_energy);
+	      printf("OldEnergy(%f), Likelihood(%f) Prior(%f) NewEnergy(%f)\n",*old_energy,*likelihood,*prior,*new_energy);
       }
     }
 
@@ -374,7 +380,7 @@ namespace Cudimot{
     /// Copy common fixed model parameters to Shared Memory ///
     if(threadIdx.x==0){ // only one thread of the whole block. Common to all voxels
       for(int i=0;i<nmeas*CFP_Tsize;i++){
-	CFP[i]=CFP_global[i];
+	      CFP[i]=CFP_global[i];
       }
     }
     ///////////////////////////////////////////////////////////
@@ -411,42 +417,42 @@ namespace Cudimot{
       *TAU_rejected=0;
       #pragma unroll
       for(int par=0;par<NPARAMS;par++){
-	params[par]=parameters[idVOX*NPARAMS+par];
-	naccepted[par]=0;
-	nrejected[par]=0;
-	priors[par]=(T)0.0;
-	if(RECORDING){
-	  // already have std of the proposals from previous iterations
-	  propSD[par]=propSD_global[idVOX*NPARAMS+par];
-	}else{
-	  propSD[par]=params[par]/(T)10.0;
-	}
+        params[par]=parameters[idVOX*NPARAMS+par];
+        naccepted[par]=0;
+        nrejected[par]=0;
+        priors[par]=(T)0.0;
+        if(RECORDING){
+          // already have std of the proposals from previous iterations
+          propSD[par]=propSD_global[idVOX*NPARAMS+par];
+        }else{
+          propSD[par]=params[par]/(T)10.0;
+        }
       }
       
       if(RICIAN_NOISE && RECORDING){
-	// TAU has been already initializated
-	*TAU=tau_samples[idVOX*nsamples];
-	*TAUpropSD=tau_propSD_global[idVOX];
+        // TAU has been already initializated
+        *TAU=tau_samples[idVOX*nsamples];
+        *TAUpropSD=tau_propSD_global[idVOX];
       }
       if(DEBUG){
-	if(idVOX==debugVOX){
-	  printf("\n ----- MCMC GPU algorithm: voxel %i -----\n",idVOX);
-	  for(int i=0;i<NPARAMS;i++){
-	    printf("Initial Parameter[%i]: %f\n",i,params[i]);
-	  }
-	  for(int i=0;i<CFP_Tsize;i++){
-	    printf("Commonn Fixed Params[%i]: ",i);
-	    for(int j=0;j<nmeas;j++){
-	      printf("%f ",CFP_global[j*CFP_Tsize+i]);
-	    }
-	    printf("\n");
-	  }
-	  printf("Fix Parameters: ");
-	  for(int i=0;i< FixP_Tsize;i++){
-	    printf("%f, ",FixP[i]);
-	  }
-	  printf("\n--------------------------------------------------------\n",idVOX);  
-	}
+	      if(idVOX==debugVOX){
+          printf("\n ----- MCMC GPU algorithm: voxel %i -----\n",idVOX);
+          for(int i=0;i<NPARAMS;i++){
+            printf("Initial Parameter[%i]: %f\n",i,params[i]);
+          }
+          for(int i=0;i<CFP_Tsize;i++){
+            printf("Commonn Fixed Params[%i]: ",i);
+            for(int j=0;j<nmeas;j++){
+              printf("%f ",CFP_global[j*CFP_Tsize+i]);
+            }
+            printf("\n");
+          }
+          printf("Fix Parameters: ");
+          for(int i=0;i<FixP_Tsize;i++){
+            printf("%f, ",FixP[i]);
+          }
+          printf("\n--------------------------------------------------------\n",idVOX);  
+	      }
       }
     }
     
@@ -455,7 +461,7 @@ namespace Cudimot{
     ///////////////////////////////////////////
     
     if(leader){
-      Initialize_priors_params(params,priors);
+      Initialize_priors_params(params,priors,nmeas,CFP,FixP);
       Compute_TotalPrior(priors,TotalPrior);
     }
     // __threadfence_block();
@@ -477,10 +483,10 @@ namespace Cudimot{
       *energy=(*TotalPrior)+(*likelihood);
 
       if(DEBUG){
-	if(idVOX==debugVOX){
-	  printf("Initial Point: Likelihood(%f) Prior(%f) Energy(%f)\n",*likelihood,*TotalPrior,*energy);
-	  printf("--------------------------------------------------------\n");  
-	}
+        if(idVOX==debugVOX){
+          printf("Initial Point: Likelihood(%f) Prior(%f) Energy(%f)\n",*likelihood,*TotalPrior,*energy);
+          printf("--------------------------------------------------------\n");  
+        }
       }
     }
     
@@ -492,160 +498,160 @@ namespace Cudimot{
     for(int iter=0; iter<niters; iter++){
 
       if(DEBUG){
-	if(idVOX==debugVOX&&leader){
-	printf("---------------------- Iteration %i ---------------------\n",iter);
-	}
+        if(idVOX==debugVOX&&leader){
+          printf("---------------------- Iteration %i ---------------------\n",iter);
+        }
       }
 
       // Propose Tau if Rician Noise
       if(RICIAN_NOISE){
-	criteria=0;
-	if(leader){
-	  *old_param=*TAU;
-	  *TAU = (*TAU) + curand_normal(localrandState)*(*TAUpropSD);
-	  if(DEBUG){
-	    if(idVOX==debugVOX){
-	      printf("Proposing Value for TAU: %f",*TAU);	
-	    }
-	  }
-	  criteria= (*TAU>(T)0.0);
-	}
-	criteria = shfl(criteria,0);
-	// __threadfence_block(); // TAU modified by leader
-	__syncthreads();
+        criteria=0;
+        if(leader){
+          *old_param=*TAU;
+          *TAU = (*TAU) + curand_normal(localrandState)*(*TAUpropSD);
+          if(DEBUG){
+            if(idVOX==debugVOX){
+              printf("Proposing Value for TAU: %f",*TAU);	
+            }
+	        }
+	        criteria= (*TAU>(T)0.0);
+	      }
+	      criteria = shfl(criteria,0);
+	      // __threadfence_block(); // TAU modified by leader
+	      __syncthreads();
 	
-	if(criteria){
-	  Compute_Likelihood<T,1,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,TAU,CFP,FixP,likelihood,debugVOX);
-	}
-	//__threadfence_block(); // all threads must have finished before modify TAU
-	__syncthreads();
-	  
-	if(leader){
-	  if(criteria){
-	    Compute_TotalPrior(priors,TotalPrior);
-	    criteria=Compute_test_energy<T,DEBUG>(energy,old_energy,TotalPrior,likelihood,localrandState,debugVOX);
-	    if(criteria){
-	      (*TAU_accepted)++;
-	      if(DEBUG){
-		if(idVOX==debugVOX){
-		  printf("Accepted TAU\n");	
-		}
-	      }
-	    }else{
-	      (*TAU_rejected)++;
-	      *TAU=(*old_param);
-	      *energy=*old_energy;
-	      if(DEBUG){
-		if(idVOX==debugVOX){
-		  printf("Rejected TAU\n");	
-		}
-	      }
-	    }
-	  }else{
-	    (*TAU_rejected)++;
-	    *TAU=(*old_param);
-	    if(DEBUG){
-	      if(idVOX==debugVOX){
-		printf("Rejected TAU\n");	
-	      }
-	    }
-	  }
-	}	
+        if(criteria){
+          Compute_Likelihood<T,1,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,TAU,CFP,FixP,likelihood,debugVOX);
+        }
+        //__threadfence_block(); // all threads must have finished before modify TAU
+        __syncthreads();
+      
+        if(leader){
+          if(criteria){
+            Compute_TotalPrior(priors,TotalPrior);
+            criteria=Compute_test_energy<T,DEBUG>(energy,old_energy,TotalPrior,likelihood,localrandState,debugVOX);
+            if(criteria){
+              (*TAU_accepted)++;
+              if(DEBUG){
+                if(idVOX==debugVOX){
+                  printf("Accepted TAU\n");	
+                }
+              }
+            }else{
+              (*TAU_rejected)++;
+              *TAU=(*old_param);
+              *energy=*old_energy;
+              if(DEBUG){
+                if(idVOX==debugVOX){
+                  printf("Rejected TAU\n");	
+                }
+              }
+            }
+          }else{
+            (*TAU_rejected)++;
+            *TAU=(*old_param);
+            if(DEBUG){
+              if(idVOX==debugVOX){
+                printf("Rejected TAU\n");	
+              }
+            }
+          }
+        }	
       }
 
       // Propose the rest of Parameters
       for(int par=0; par<NPARAMS; par++){
-	criteria=0;
+	      criteria=0;
 	
-	if(leader){
-	  Propose<T,DEBUG>(par,params,old_param,propSD,localrandState,debugVOX);
-	  criteria=Check_bounds_constraints(par,params);
-	}	
-	criteria = shfl(criteria,0);
-	// __threadfence_block(); //params is modified by leader
-	__syncthreads();
+        if(leader){
+          Propose<T,DEBUG>(par,params,old_param,propSD,localrandState,debugVOX);
+          criteria=Check_bounds_constraints(par,params);
+        }	
+        criteria = shfl(criteria,0);
+        // __threadfence_block(); //params is modified by leader
+        __syncthreads();
 
-	if(criteria){
-	  Compute_Likelihood<T,RICIAN_NOISE,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,TAU,CFP,FixP,likelihood,debugVOX);
-	}  
-	// __threadfence_block(); // params cannot be modify until all threads finish
-	__syncthreads();
+        if(criteria){
+          Compute_Likelihood<T,RICIAN_NOISE,DEBUG>(idSubVOX,nmeas,CFP_Tsize,meas,params,TAU,CFP,FixP,likelihood,debugVOX);
+        }  
+	      // __threadfence_block(); // params cannot be modify until all threads finish
+	      __syncthreads();
  
-	if(leader){
-	  if(criteria){
-	    Compute_prior(par,params,priors,old_prior);
-	    Compute_TotalPrior(priors,TotalPrior);
-	    criteria=Compute_test_energy<T,DEBUG>(energy,old_energy,TotalPrior,likelihood,localrandState,debugVOX);
-	    if(criteria){
-	      naccepted[par]++;
-	      if(DEBUG){
-		if(idVOX==debugVOX){
-		  printf("Accepted Parameter_%i\n",par);	
-		}
+        if(leader){
+          if(criteria){
+            Compute_prior(par,params,priors,old_prior,nmeas,CFP,FixP);
+            Compute_TotalPrior(priors,TotalPrior);
+            criteria=Compute_test_energy<T,DEBUG>(energy,old_energy,TotalPrior,likelihood,localrandState,debugVOX);
+            if(criteria){
+              naccepted[par]++;
+              if(DEBUG){
+                if(idVOX==debugVOX){
+                  printf("Accepted Parameter_%i\n",par);	
+                }
+	            }
+	          }else{
+              nrejected[par]++;
+              params[par]=(*old_param);
+              priors[par]=(*old_prior);
+              *energy=*old_energy;
+	            if(DEBUG){
+                if(idVOX==debugVOX){
+                  printf("Rejected Parameter_%i\n",par);	
+                }
+	            }
+	          }
+	        }else{
+            nrejected[par]++;
+            params[par]=(*old_param);
+	          if(DEBUG){
+	            if(idVOX==debugVOX){
+                printf("Rejected Parameter_%i\n",par);	
+              }
+	          }
+	        }
 	      }
-	    }else{
-	      nrejected[par]++;
-	      params[par]=(*old_param);
-	      priors[par]=(*old_prior);
-	      *energy=*old_energy;
-	      if(DEBUG){
-		if(idVOX==debugVOX){
-		  printf("Rejected Parameter_%i\n",par);	
-		}
-	      }
-	    }
-	  }else{
-	    nrejected[par]++;
-	    params[par]=(*old_param);
-	    if(DEBUG){
-	      if(idVOX==debugVOX){
-		printf("Rejected Parameter_%i\n",par);	
-	      }
-	    }
-	  }
-	}
       }
       
       // Record Samples
       if(RECORDING){
-	if((!(iter%sampleevery))&&(leader)){
-	  int nsamp=iter/sampleevery;
-	  #pragma unroll
-	  for(int par=0; par<NPARAMS; par++){
-	    samples[par*nsamples+nsamp]=params[par];
-	  }
-	  if(RICIAN_NOISE){
-	    tau_samples[idVOX*nsamples+nsamp]=*TAU;
-	  }
-	}
+	      if((!(iter%sampleevery))&&(leader)){
+	        int nsamp=iter/sampleevery;
+	        #pragma unroll
+	        for(int par=0; par<NPARAMS; par++){
+	          samples[par*nsamples+nsamp]=params[par];
+	        }
+	        if(RICIAN_NOISE){
+	          tau_samples[idVOX*nsamples+nsamp]=*TAU;
+	        }
+	      }
       }
 
       // Update propsals Std
       if(!RECORDING || UPDATE_PROP){  // deactivated when not recording if --no_updateproposal
-	if((iter>0)&&(!(iter%updateproposalevery))&&(leader)){
+	      if((iter>0)&&(!(iter%updateproposalevery))&&(leader)){
           #pragma unroll
-	  for(int par=0; par<NPARAMS; par++){
-	    propSD[par]*=sqrt((naccepted[par]+(T)1.0)/(nrejected[par]+(T)1.0));
-	    propSD[par]=min_gpu(propSD[par],(T)maxfloat);
-	    naccepted[par]=0;
-	    nrejected[par]=0;
-	  }
-	  if(RICIAN_NOISE){
-	    (*TAUpropSD)*=sqrt(((*TAU_accepted)+(T)1.0)/(*(TAU_rejected)+(T)1.0));
-	    (*TAUpropSD)=min_gpu(*TAUpropSD,(T)maxfloat);
-	    *TAU_accepted=0;
-	    *TAU_rejected=0;
-	  }
-	}
+	        for(int par=0; par<NPARAMS; par++){
+            propSD[par]*=sqrt((naccepted[par]+(T)1.0)/(nrejected[par]+(T)1.0));
+            propSD[par]=min_gpu(propSD[par],(T)maxfloat);
+            naccepted[par]=0;
+            nrejected[par]=0;
+	        }
+	        if(RICIAN_NOISE){
+            (*TAUpropSD)*=sqrt(((*TAU_accepted)+(T)1.0)/(*(TAU_rejected)+(T)1.0));
+            (*TAUpropSD)=min_gpu(*TAUpropSD,(T)maxfloat);
+            *TAU_accepted=0;
+            *TAU_rejected=0;
+	        }
+	      }
       }
 
       if(DEBUG){
-	if(idVOX==debugVOX&&leader){
-	  for(int i=0;i<NPARAMS;i++){
-	     printf("Parameter[%i]: %f\n",i,params[i]);
-	  }
-	  printf("--------------------------------------------------------\n");  
-	}
+	      if(idVOX==debugVOX&&leader){
+          for(int i=0;i<NPARAMS;i++){
+            printf("Parameter[%i]: %f\n",i,params[i]);
+          }
+	        printf("--------------------------------------------------------\n");  
+	      }
       }
 
     }  // end Iterations
@@ -657,21 +663,21 @@ namespace Cudimot{
       #pragma unroll
       for(int par=0;par<NPARAMS;par++){
       	parameters[idVOX*NPARAMS+par]=params[par];
-	if(!RECORDING){
-	  propSD_global[idVOX*NPARAMS+par]=propSD[par];
-	}
+        if(!RECORDING){
+          propSD_global[idVOX*NPARAMS+par]=propSD[par];
+        }
       }
       if(DEBUG){
-	  if(idVOX==debugVOX){
-	    for(int i=0;i<NPARAMS;i++){
-	      printf("Final Parameter[%i]: %f\n",i,params[i]);
+	      if(idVOX==debugVOX){
+          for(int i=0;i<NPARAMS;i++){
+            printf("Final Parameter[%i]: %f\n",i,params[i]);
+          }
+	      }
 	    }
-	  }
-	}
       if(RICIAN_NOISE && !RECORDING){
-	//save TAU and TAUpropSD
-	tau_samples[idVOX*nsamples]=*TAU;
-	tau_propSD_global[idVOX]=*TAUpropSD;
+        //save TAU and TAUpropSD
+        tau_samples[idVOX*nsamples]=*TAU;
+        tau_propSD_global[idVOX]=*TAUpropSD;
       }
     }
   }
@@ -793,15 +799,15 @@ namespace Cudimot{
     // Burn-In   ... always update_proposals
     if(RicianNoise){
       if(DEBUG){
-	mcmc_kernel<T,false,true,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      mcmc_kernel<T,false,true,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
       }else{
-	mcmc_kernel<T,false,true,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      mcmc_kernel<T,false,true,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
       }
     }else{
       if(DEBUG){
-	mcmc_kernel<T,false,true,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      mcmc_kernel<T,false,true,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
       }else{
-	mcmc_kernel<T,false,true,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      mcmc_kernel<T,false,true,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,nburnin,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
       }
     }
     sync_check("MCMC Kernel: burnin step");
@@ -810,32 +816,32 @@ namespace Cudimot{
     // Recordig
     if(updateproposal){
       if(RicianNoise){
-	if(DEBUG){
-	  mcmc_kernel<T,true,true,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
-	}else{
-	  mcmc_kernel<T,true,true,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
-	}
+	      if(DEBUG){
+	        mcmc_kernel<T,true,true,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      }else{
+	        mcmc_kernel<T,true,true,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      }
       }else{
-	if(DEBUG){
-	  mcmc_kernel<T,true,true,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
-	}else{
-	  mcmc_kernel<T,true,true,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
-	}
+	      if(DEBUG){
+	        mcmc_kernel<T,true,true,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      }else{
+	        mcmc_kernel<T,true,true,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      }
       }
       
     }else{ // no_updateproposal
       if(RicianNoise){
-	if(DEBUG){
-	  mcmc_kernel<T,true,false,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
-	}else{
-	  mcmc_kernel<T,true,false,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
-	}
+	      if(DEBUG){
+	        mcmc_kernel<T,true,false,true,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      }else{
+	        mcmc_kernel<T,true,false,true,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      }
       }else{
-	if(DEBUG){
-	  mcmc_kernel<T,true,false,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
-	}else{
-	  mcmc_kernel<T,true,false,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
-	}
+	      if(DEBUG){
+	        mcmc_kernel<T,true,false,false,true><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      }else{
+	        mcmc_kernel<T,true,false,false,false><<<nblocks,threads_block,amount_shared_mem>>>(randStates,nmeas,CFP_size,FixP_size,njumps,nsamples,sampleevery,updateproposalevery,meas,params,propSD,CFP,FixP,samples,tau_samples,tau_propSD,debugVOX);
+	      }
       }
     }
     sync_check("MCMC Kernel: recording step"); 

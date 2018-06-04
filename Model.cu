@@ -64,204 +64,206 @@ namespace Cudimot{
       while(getline(file_parameters,line)){
 	
        	//if(!line.compare(mark_start)) reader_state=1; // Starting MARK
-	if(reader_state){ 
-	  // Reading useful information
-	  int pos0, pos1;
+				if(reader_state){ 
+	  			// Reading useful information
+	  			int pos0, pos1;
 	  
-	  if((pos0=line.find(mark_comment))>=0){
-	    // If line commented out using "//", ignore the line
-	    continue;
-	  }
+	 				if((pos0=line.find(mark_comment))>=0){
+	    			// If line commented out using "//", ignore the line
+	    			continue;
+	  			}
 	  
-	  //if((pos0=line.find(mark_NPARAMS))>=0){ 
-	  // Read Number of Parameters
-	  //pos0=pos0+mark_NPARAMS.length();
-	  //line.erase(0,pos0);
-	  //nparams=atoi(line.data());
-	  //}
+					//if((pos0=line.find(mark_NPARAMS))>=0){ 
+					// Read Number of Parameters
+					//pos0=pos0+mark_NPARAMS.length();
+					//line.erase(0,pos0);
+					//nparams=atoi(line.data());
+					//}
 	  
-	  if((pos0=line.find(Pinit_mark))>=0){
-	    // Read Parameter Initialization
-	    provided_params_init=true;
-	    pos0=pos0+Pinit_mark.length();
-	    pos1=line.rfind(mark_end);
-	    int len = pos1-pos0;
-	    string vals=line.substr(pos0,len);
-	    string token;
-	    while ((pos0 = vals.find(delimiter))>=0){
-	      params_init.push_back(strtod(vals.substr(0,pos0).data(),NULL));
-	      vals.erase(0,pos0+delimiter.length());
-	    }
-	    params_init.push_back(strtod(vals.data(),NULL));
-	    if(params_init.size()!=NPARAMS){
-	      cerr << "CUDIMOT Error: The number of values for initializating the parameters " << params_init.size() <<" do not match the number of parameters of this model " << NPARAMS << " in the file: "<< input_file << endl; 
-	      exit(-1);
-	    }
-	  }
+					if((pos0=line.find(Pinit_mark))>=0){
+						// Read Parameter Initialization
+						provided_params_init=true;
+						pos0=pos0+Pinit_mark.length();
+						pos1=line.rfind(mark_end);
+						int len = pos1-pos0;
+						string vals=line.substr(pos0,len);
+						string token;
+						while ((pos0 = vals.find(delimiter))>=0){
+							params_init.push_back(strtod(vals.substr(0,pos0).data(),NULL));
+							vals.erase(0,pos0+delimiter.length());
+						}
+						params_init.push_back(strtod(vals.data(),NULL));
+						if(params_init.size()!=NPARAMS){
+							cerr << "CUDIMOT Error: The number of values for initializating the parameters " << params_init.size() <<" do not match the number of parameters of this model " << NPARAMS << " in the file: "<< input_file << endl; 
+							exit(-1);
+						}
+					}
 	
-	  if((pos0=line.find(bound_mark))>=0){ 
-	    // Read bounds for a parameter
-	    pos0=pos0+bound_mark.length();
-	    pos1=line.rfind(mark_end);
-	    int len = pos1-pos0;
-	    int idBound=atoi(line.substr(pos0,len).data());
+					if((pos0=line.find(bound_mark))>=0){ 
+						// Read bounds for a parameter
+						pos0=pos0+bound_mark.length();
+						pos1=line.rfind(mark_end);
+						int len = pos1-pos0;
+						int idBound=atoi(line.substr(pos0,len).data());
 
-	    if(idBound>=NPARAMS || idBound<0){
-	      cerr << "CUDIMOT Error: Wrong number of parameter [" << idBound << "] when specifying the bounds in file" << input_file << endl;
-	      exit(-1);
-	    }
-	    
-	    bound_types[idBound]=BMINMAX; // assume(min,max)
-	    // look for the parameters
-	    pos0=line.rfind("=")+1;
-	    pos1=line.rfind("(");
-	    len = pos1-pos0;
-	    string type =  line.substr(pos0,len);
-	    
-	    // First parameter
-	    pos0=pos1+1;
-	    pos1=line.rfind(",");
-	    len= pos1-pos0;
-	    if(len==0){ 
-	      // No first parameter
-	      bound_types[idBound]=BMAX;
-	    }else{
-	      bounds_min[idBound] = strtod(line.substr(pos0,len).data(),NULL);
-	    }
+						if(idBound>=NPARAMS || idBound<0){
+							cerr << "CUDIMOT Error: Wrong number of parameter [" << idBound << "] when specifying the bounds in file" << input_file << endl;
+							exit(-1);
+						}
+						
+						bound_types[idBound]=BMINMAX; // assume(min,max)
+						// look for the parameters
+						pos0=line.rfind("=")+1;
+						pos1=line.rfind("(");
+						len = pos1-pos0;
+						string type =  line.substr(pos0,len);
+						
+						// First parameter
+						pos0=pos1+1;
+						pos1=line.rfind(",");
+						len= pos1-pos0;
+						if(len==0){ 
+							// No first parameter
+							bound_types[idBound]=BMAX;
+						}else{
+							bounds_min[idBound] = strtod(line.substr(pos0,len).data(),NULL);
+						}
 
-	    // Second parameter
-	    pos0=pos1+1;
-	    pos1=line.rfind(")");
-	    len= pos1-pos0;
-	    if(len==0 && bound_types[idBound]==BMINMAX){ 
-	      // First parameter and No second parameter
-	      bound_types[idBound]=BMIN;
-	    }else if(len==0){
-	      cerr << "CUDIMOT Error: For bounded priors, at least a min or a max value must be specified: bounds[x]=(min,), bounds[x]=(,max) or bounds[x]=(min,max)" << type << endl; 
-	      exit(-1);
-	    }else{
-	      bounds_max[idBound] = strtod(line.substr(pos0,len).data(),NULL);
-	    }
-	  }
+						// Second parameter
+						pos0=pos1+1;
+						pos1=line.rfind(")");
+						len= pos1-pos0;
+						if(len==0 && bound_types[idBound]==BMINMAX){ 
+							// First parameter and No second parameter
+							bound_types[idBound]=BMIN;
+						}else if(len==0){
+							cerr << "CUDIMOT Error: For bounded priors, at least a min or a max value must be specified: bounds[x]=(min,), bounds[x]=(,max) or bounds[x]=(min,max)" << type << endl; 
+							exit(-1);
+						}else{
+							bounds_max[idBound] = strtod(line.substr(pos0,len).data(),NULL);
+						}
+					}
 	  
-	  if((pos0=line.find(prior_mark))>=0){ 
-	    // Read a Prior
-	    pos0=pos0+prior_mark.length();
-	    pos1=line.rfind(mark_end);
-	    int len = pos1-pos0;
-	    int idPrior=atoi(line.substr(pos0,len).data());
-	    if(idPrior>=NPARAMS || idPrior<0){
-	      cerr << "CUDIMOT Error: Wrong number of parameter [" << idPrior << "] when specifying the priors in file" << input_file << endl;
-	      exit(-1);
-	    }
-	    
-	    pos0=line.rfind("=")+1;
-	    pos1=line.rfind("(");
-	    len = pos1-pos0;
-	    string type =  line.substr(pos0,len);
-	    
-	    if(type.compare("Gaussian")==0){
-	      prior_types[idPrior]=GAUSSPRIOR;
-	    }else if(type.compare("Gamma")==0){
-	      prior_types[idPrior]=GAMMAPRIOR;
-	    }else if(type.compare("ARD")==0){
-	      prior_types[idPrior]=ARDPRIOR;
-	    }else if(type.compare("sin")==0){
-	      prior_types[idPrior]=SINPRIOR;
-	    }else{
-	      cerr << "CUDIMOT Error: Prior " << type << " is a not a recognised prior type" << endl; 
-	      exit(-1);
-	    }
-	    if(prior_types[idPrior]<=3){ 
-	      // look for the parameters
-	      // First parameter
-	      pos0=pos1+1;
-	      pos1=line.rfind(",");
-	      len= pos1-pos0;
-	      if(len==0){
-		cerr << "CUDIMOT Error: A prior of type " << type << " needs a first argument" << endl; 
-		exit(-1);
-	      }else{
-		priors_a[idPrior] = strtod(line.substr(pos0,len).data(),NULL);
-	      }
-	      
-	      if(prior_types[idPrior]<=2){ 
-		// Second parameter
-		pos0=pos1+1;
-		pos1=line.rfind(")");
-		len= pos1-pos0;
-		if(len==0){
-		  cerr << "CUDIMOT Error: A prior of type " << type << " needs a second argument" << endl; 
-		  exit(-1);
-		}else{
-		  priors_b[idPrior] = strtod(line.substr(pos0,len).data(),NULL);
-		}
-	      }
-	    }
-	  }
+					if((pos0=line.find(prior_mark))>=0){
+						// Read a Prior
+						pos0=pos0+prior_mark.length();
+						pos1=line.rfind(mark_end);
+						int len = pos1-pos0;
+						int idPrior=atoi(line.substr(pos0,len).data());
+						if(idPrior>=NPARAMS || idPrior<0){
+							cerr << "CUDIMOT Error: Wrong number of parameter [" << idPrior << "] when specifying the priors in file" << input_file << endl;
+							exit(-1);
+						}
+						
+						pos0=line.rfind("=")+1;
+						pos1=line.rfind("(");
+						len = pos1-pos0;
+						string type =  line.substr(pos0,len);
+						
+						if(type.compare("Gaussian")==0){
+							prior_types[idPrior]=GAUSSPRIOR;
+						}else if(type.compare("Gamma")==0){
+							prior_types[idPrior]=GAMMAPRIOR;
+						}else if(type.compare("ARD")==0){
+							prior_types[idPrior]=ARDPRIOR;
+						}else if(type.compare("sin")==0){
+							prior_types[idPrior]=SINPRIOR;
+						}else if(type.compare("custom")==0){
+							prior_types[idPrior]=CUSTOM;
+						}else{
+							cerr << "CUDIMOT Error: Prior " << type << " is a not a recognised prior type" << endl; 
+							exit(-1);
+						}
+						if(prior_types[idPrior]<=3){ 
+							// look for the parameters
+							// First parameter
+							pos0=pos1+1;
+							pos1=line.rfind(",");
+							len= pos1-pos0;
+							if(len==0){
+								cerr << "CUDIMOT Error: A prior of type " << type << " needs a first argument" << endl; 
+								exit(-1);
+							}else{
+								priors_a[idPrior] = strtod(line.substr(pos0,len).data(),NULL);
+							}
+							
+							if(prior_types[idPrior]<=2){ 
+								// Second parameter
+								pos0=pos1+1;
+								pos1=line.rfind(")");
+								len= pos1-pos0;
+								if(len==0){
+									cerr << "CUDIMOT Error: A prior of type " << type << " needs a second argument" << endl; 
+									exit(-1);
+								}else{
+									priors_b[idPrior] = strtod(line.substr(pos0,len).data(),NULL);
+								}
+							}
+						}
+					}
 	  
-    	  /*if((pos0=line.find(CFP_size_mark))>=0){ 
-	    // Read common fixed param Sizes
-	    pos0=pos0+CFP_size_mark.length();
-	    pos1=line.rfind(mark_end);
-	    int len = pos1-pos0;
-	    string vals=line.substr(pos0,len);
-	    string token;
-	    while ((pos0 = vals.find(delimiter))>=0){
-	      int size=atoi(vals.substr(0,pos0).data());
-	      CFP_sizes.push_back(size);
-	      CFP_Tsize+=size;
-	      nCFP++;
-	      vals.erase(0,pos0+delimiter.length());
-	    }
-	    int size=atoi(vals.data());
-	    CFP_sizes.push_back(size);
-	    CFP_Tsize+=size;
-	    nCFP++;
-	  }
+					/*if((pos0=line.find(CFP_size_mark))>=0){ 
+					// Read common fixed param Sizes
+					pos0=pos0+CFP_size_mark.length();
+					pos1=line.rfind(mark_end);
+					int len = pos1-pos0;
+					string vals=line.substr(pos0,len);
+					string token;
+					while ((pos0 = vals.find(delimiter))>=0){
+						int size=atoi(vals.substr(0,pos0).data());
+						CFP_sizes.push_back(size);
+						CFP_Tsize+=size;
+						nCFP++;
+						vals.erase(0,pos0+delimiter.length());
+					}
+					int size=atoi(vals.data());
+					CFP_sizes.push_back(size);
+					CFP_Tsize+=size;
+					nCFP++;
+				}
 
-	  if((pos0=line.find(FixP_size_mark))>=0){ 
-	    // Read fixed param Sizes
-	    pos0=pos0+FixP_size_mark.length();
-	    pos1=line.rfind(mark_end);
-	    int len = pos1-pos0;
-	    string vals=line.substr(pos0,len);
-	    string token;
-	    while ((pos0 = vals.find(delimiter))>=0){
-	      int size=atoi(vals.substr(0,pos0).data());
-	      FixP_sizes.push_back(size);
-	      FixP_Tsize+=size;
-	      nFixP++;
-	      vals.erase(0,pos0+delimiter.length());
-	    }
-	    int size=atoi(vals.data());
-	    FixP_sizes.push_back(size);
-	    FixP_Tsize+=size;
-	    nFixP++;
-	    }*/
-	}
-      }
-      file_parameters.close();
+				if((pos0=line.find(FixP_size_mark))>=0){ 
+					// Read fixed param Sizes
+					pos0=pos0+FixP_size_mark.length();
+					pos1=line.rfind(mark_end);
+					int len = pos1-pos0;
+					string vals=line.substr(pos0,len);
+					string token;
+					while ((pos0 = vals.find(delimiter))>=0){
+						int size=atoi(vals.substr(0,pos0).data());
+						FixP_sizes.push_back(size);
+						FixP_Tsize+=size;
+						nFixP++;
+						vals.erase(0,pos0+delimiter.length());
+					}
+					int size=atoi(vals.data());
+					FixP_sizes.push_back(size);
+					FixP_Tsize+=size;
+					nFixP++;
+					}*/
+				}
+			}
+			file_parameters.close();
 
       nCFP=NCFP;
       for(int i=0;i<nCFP;i++){
-	int size=MODEL::CFP_size[i];
-	CFP_sizes.push_back(size);
-	CFP_Tsize+=size;
+				int size=MODEL::CFP_size[i];
+				CFP_sizes.push_back(size);
+				CFP_Tsize+=size;
       }
 
       nFixP=NFIXP;
       for(int i=0;i<nFixP;i++){
-	int size=MODEL::FixP_size[i];
-	FixP_sizes.push_back(size);
-	FixP_Tsize+=size;
+				int size=MODEL::FixP_size[i];
+				FixP_sizes.push_back(size);
+				FixP_Tsize+=size;
       }
             
       // CHECK
       if(!nparams){
-	string input_file(opts.priorsfile.value());
-	cerr << "CUDIMOT Error: Number of parameters must be greater than 0. Please check your parameter specification: " << input_file.data() << endl;
-	exit(-1);
+				string input_file(opts.priorsfile.value());
+				cerr << "CUDIMOT Error: Number of parameters must be greater than 0. Please check your parameter specification: " << input_file.data() << endl;
+				exit(-1);
       }
 
       //if(nFixP =! NFIXED_PARAMS){
@@ -282,16 +284,16 @@ namespace Cudimot{
       vector<int> vect;
       int i;
       while (ss >> i){
-	if(i>=nparams){
-	   cerr << "CUDIMOT Error: Wrong number of parameter " <<  i << " when specifying the fixed parameters" << endl;
-	   exit(-1);
-	}
+				if(i>=nparams){
+	   			cerr << "CUDIMOT Error: Wrong number of parameter " <<  i << " when specifying the fixed parameters" << endl;
+	   			exit(-1);
+				}
         vect.push_back(i);
         if (ss.peek() == ',')
-	  ss.ignore();
+	  		ss.ignore();
       }
       for (i=0; i<vect.size(); i++){
-	fixed[vect[i]]=1;
+				fixed[vect[i]]=1;
       }
     }
   }
@@ -314,35 +316,35 @@ namespace Cudimot{
 
     if (file_parameters.is_open()){
       while(getline(file_parameters,line)){
-	int pos0, pos1;
-	if((pos0=line.find(mark_comment))>=0){
-	  // If line commented out using "//", ignore the line
-	  continue;
-	}
+				int pos0, pos1;
+				if((pos0=line.find(mark_comment))>=0){
+					// If line commented out using "//", ignore the line
+					continue;
+				}
 			  
-	if((pos0=line.find(search_mark))>=0){
-	  // Read Search values for one parameter
-	  pos0=pos0+search_mark.length();
-	  pos1=line.rfind(parid_end);
-	  int len = pos1-pos0;
-	  int idSearch=atoi(line.substr(pos0,len).data());
-	  if(idSearch>=NPARAMS || idSearch<0){
-	    cerr << "CUDIMOT Error: Wrong number of parameter [" << idSearch << "] when specifying the GridSearch values in file" << input_file << endl;
-	    exit(-1);
-	  }
-	  pos1=line.rfind("("); // ignore "]=("
-	  pos0=pos1+1; 
-	  pos1=line.rfind(")");
-	  len = pos1-pos0;
-	  string vals=line.substr(pos0,len);
+				if((pos0=line.find(search_mark))>=0){
+					// Read Search values for one parameter
+					pos0=pos0+search_mark.length();
+					pos1=line.rfind(parid_end);
+					int len = pos1-pos0;
+					int idSearch=atoi(line.substr(pos0,len).data());
+					if(idSearch>=NPARAMS || idSearch<0){
+						cerr << "CUDIMOT Error: Wrong number of parameter [" << idSearch << "] when specifying the GridSearch values in file" << input_file << endl;
+						exit(-1);
+					}
+					pos1=line.rfind("("); // ignore "]=("
+					pos0=pos1+1; 
+					pos1=line.rfind(")");
+					len = pos1-pos0;
+					string vals=line.substr(pos0,len);
 
-	  //string token;
-	  while ((pos0 = vals.find(delimiter))>=0){
-	    gridTmp[idSearch].push_back(strtod(vals.substr(0,pos0).data(),NULL));
-	    vals.erase(0,pos0+delimiter.length());
-	  }
-	  gridTmp[idSearch].push_back(strtod(vals.data(),NULL));
-	}
+					//string token;
+					while ((pos0 = vals.find(delimiter))>=0){
+						gridTmp[idSearch].push_back(strtod(vals.substr(0,pos0).data(),NULL));
+						vals.erase(0,pos0+delimiter.length());
+					}
+					gridTmp[idSearch].push_back(strtod(vals.data(),NULL));
+				}
       }
     }else{
       cerr << "CUDIMOT Error: Unable to open GridSearch file configuration: " << input_file.data() << endl; 
@@ -353,9 +355,9 @@ namespace Cudimot{
     gridCombs=1;
     for(int i=0;i<NPARAMS;i++){
       if(gridTmp[i].size()){
-	gridParams.push_back(i);
-	nGridParams++;
-	gridCombs*=gridTmp[i].size();
+				gridParams.push_back(i);
+				nGridParams++;
+				gridCombs*=gridTmp[i].size();
       }
     }
     if(nGridParams==0) gridCombs=0;
@@ -377,14 +379,14 @@ namespace Cudimot{
   {
     for(int i=0;i<gridTmp[gridParams[level]].size();i++){
       if(level==(nGridParams-1)){
-	comb[level] = gridTmp[gridParams[level]][i];
-	for(int j=0;j<nGridParams;j++){
-	  grid[ncomb*nGridParams+j]=comb[j];
-	}
-	ncomb++;
+				comb[level] = gridTmp[gridParams[level]][i];
+				for(int j=0;j<nGridParams;j++){
+					grid[ncomb*nGridParams+j]=comb[j];
+				}
+				ncomb++;
       }else{
-	comb[level] = gridTmp[gridParams[level]][i];
-	set_grid(level+1,nGridParams,ncomb,comb,gridTmp,gridParams,grid);
+				comb[level] = gridTmp[gridParams[level]][i];
+				set_grid(level+1,nGridParams,ncomb,comb,gridTmp,gridParams,grid);
       }
     }
       

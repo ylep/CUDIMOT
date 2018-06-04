@@ -1,8 +1,9 @@
-// 4 functions to be implemented:
+// 5 functions to be implemented:
 // - The model predicted signal
 // - Constraints during MCMC (Optional)
 // - Partial derivatives for Levenberg-Marquardt (Optional)
 // - Constraints after Levenberg-Marquardt (Optional)
+// - custom priors function (Optional)
 
 // Using as example a simple model, Ball & 1-Stick with parameters:
 // P[0]: S0
@@ -99,3 +100,26 @@ MACRO void FixConstraintsLM(
 }
 
 
+
+// If needed, here you can define custom priors
+// this function will be called only for the parameters that have a prior custom() in modelpriors file
+// It must return a single value
+MACRO T custom_priors(
+       int id_p,   // the number of parameter in the model (starts at 0)
+			 T* P, 		// Estimated parameters
+       int nmeas, // Number of measurements per voxel
+			 T* CFP, 	// Fixed Parameters common to all the voxels for all measurements !!
+			 T* FixP) 	// Fixed Parameters for each voxel
+{
+  // Here you can define several functions, using as conditional the number of parameter p
+  // For instance: if(p==4) do this; if(p==5) do that;    
+  // but prior must be defined custom() to call this function !!
+  // In this case CFP contains a vector with Number_Common_Parameters X NumberMeasurements
+  // So, user needs to deal with the indexes of the vector
+  // For support this indexig, the fucntion receive in nmeas the Number of measurements
+
+  // Example, a gaussian prior with mean 3.0 ans std 0.1:
+  // return ((P[id_p]-(T)3.0)*(P[id_p]-(T)3.0)/((T)2.0*((T)0.1*(T)0.1)));
+  
+  return 0;
+}

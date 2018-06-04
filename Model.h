@@ -117,6 +117,7 @@ namespace Cudimot{
      * 2: Gamma(alpha,beta)
      * 3: ARD(fudge_factor)
      * 4: sin()
+     * 5: custom()
      */
     vector<int> prior_types;
     

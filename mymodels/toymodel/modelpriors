@@ -11,6 +11,6 @@ P_init[1,1]
 // prior[number_parameter]=Gamma(alpha,beta)
 // prior[number_parameter]=ARD(fudge_factor)
 // prior[number_parameter]=sin()
-
+// prior[number_parameter]=custom()
 
 

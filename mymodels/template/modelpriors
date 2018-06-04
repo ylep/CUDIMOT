@@ -19,8 +19,4 @@ bounds[4]=(-100,100)
 // prior[number_parameter]=Gamma(alpha,beta)
 // prior[number_parameter]=ARD(fudge_factor)
 // prior[number_parameter]=sin()
-// For instance:
-
-prior[3]=sin()
-
-
+// prior[number_parameter]=custom()
