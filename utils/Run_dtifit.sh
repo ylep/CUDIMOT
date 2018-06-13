@@ -8,6 +8,8 @@
 #
 # Run Dtifit and calculate the spherical coordinates from the tensors
 
+bindir=${CUDIMOT}/bin
+
 Usage() {
     echo ""
     echo "Usage: Run_dtifit <subject_directory> <output>"
@@ -21,7 +23,6 @@ Usage() {
 
 subjdir=$1
 output=$2
-bindir=$3
 
 ${FSLDIR}/bin/dtifit -k ${subjdir}/data -m ${subjdir}/nodif_brain_mask -r ${subjdir}/bvecs -b ${subjdir}/bvals -o ${output}/Dtifit/dtifit --save_tensor
 

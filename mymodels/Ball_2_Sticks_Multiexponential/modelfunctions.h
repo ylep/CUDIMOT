@@ -164,3 +164,13 @@ MACRO void FixConstraintsLM(
   }
 }
 
+MACRO T custom_priors(
+       int id_p,   // the number of parameter in the model (starts at 0)
+			 T* P, 		// Estimated parameters
+       int nmeas, // Number of measurements per voxel
+			 T* CFP, 	// Fixed Parameters common to all the voxels for all measurements !!
+			 T* FixP) 	// Fixed Parameters for each voxel
+{
+	return (T)0.0;
+}
+

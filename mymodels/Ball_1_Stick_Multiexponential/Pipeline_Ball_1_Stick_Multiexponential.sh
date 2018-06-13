@@ -8,7 +8,17 @@
 #
 # Pipeline for fitting Ball-1Stick Multiexponential as Bedpostx
 
-bindir=$FSLDEVDIR/bin
+if [ "x$CUDIMOT" == "x" ]; then
+	echo ""
+	echo "Please, set enviroment variable CUDIMOT with the path where cuDIMOT is installed"
+	echo "The path must contain a bin directory with binary files, i.e. \$CUDIMOT/bin"
+	echo "For instance:   export CUDA=/home/moises/CUDIMOT"
+	echo ""
+  exit 1
+fi
+
+bindir=${CUDIMOT}/bin
+
 modelname=Ball_1_Stick_Multiexponential
 step1=Ball_1_Stick
 
@@ -198,4 +208,5 @@ finishProcess=`${FSLDIR}/bin/fsl_sub $queue -l ${subjdir}.${modelname}/logs -N $
 
 endt=`date +%s`
 runtime=$((endt-start))
-echo Runtime $runtime
+#echo Runtime $runtime
+echo Everything Queued

@@ -81,5 +81,6 @@ MACRO T custom_priors(
   // Example, a gaussian prior with mean 3.0 ans std 0.1:
   // return ((P[id_p]-(T)3.0)*(P[id_p]-(T)3.0)/((T)2.0*((T)0.1*(T)0.1)));
   
-  return 0;
+  return (T)0.0;
 }
+

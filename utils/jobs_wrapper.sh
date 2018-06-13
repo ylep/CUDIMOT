@@ -8,7 +8,7 @@
 #
 #  Script to submit 3 jobs: Split_parts, FitModel, Merge_parts  
 
-bindir=$FSLDEVDIR/bin   
+bindir=${CUDIMOT}/bin  
 
 Usage() {
     echo ""
@@ -17,7 +17,7 @@ Usage() {
     exit 1
 }
     
-[ "$3" = "" ] && Usage
+[ "$5" = "" ] && Usage
 
 queue=""
 if [ "x$SGE_ROOT" != "x" ]; then

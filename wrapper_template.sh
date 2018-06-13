@@ -1,5 +1,5 @@
 
-bindir=$FSLDEVDIR/bin
+bindir=${CUDIMOT}/bin
 if [ ! -f $bindir/$modelname ]; then
     echo "Please set a correct modelname. Not binaries found for model: $modelname"
     exit 1

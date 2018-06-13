@@ -39,11 +39,11 @@ SM_61 = -gencode arch=compute_61,code=sm_61
 SM_70 = -gencode arch=compute_70,code=sm_70
 
 #for Realease
-GPU_CARDS = $(SM_30) $(SM_35) $(SM_37) $(SM_50) $(SM_52) 
+GPU_CARDs = $(SM_30) $(SM_35) $(SM_37) $(SM_50) $(SM_52) 
 #$(SM_60) $(SM_61)
 
 #for FMRIB
-#GPU_CARDS = $(SM_37) $(SM_35)
+#GPU_CARDs = $(SM_37) $(SM_35)
 
 PROJNAME = CUDIMOT
 
@@ -99,45 +99,45 @@ $(DIR_objs)/merge_parts_${modelname}: $(DIR_objs)/cudimotoptions.o $(DIR_objs)/l
 	${CXX} ${CXXFLAGS} ${LDFLAGS} -o $@ $(DIR_objs)/cudimotoptions.o $(DIR_objs)/link_cudimot_gpu.o merge_parts.cc ${DLIBS} $(CUDIMOT_CUDA_OBJS) -lcudart -lboost_filesystem -lboost_system -L${CUDA}/lib64 -L${CUDA}/lib
 
 $(DIR_objs)/init_gpu.o: 
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) -o $@ init_gpu.cu $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ init_gpu.cu $(CUDA_INC)
 
 $(DIR_objs)/dMRI_Data.o: 
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) -o $@ dMRI_Data.cu $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ dMRI_Data.cu $(CUDA_INC)
 
 $(DIR_objs)/Parameters.o: 
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) -o $@ Parameters.cu $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ Parameters.cu $(CUDA_INC)
 
 $(DIR_objs)/Model.o: 
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) -o $@ Model.cu $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ Model.cu $(CUDA_INC)
 
 $(DIR_objs)/modelparameters.o: 
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) $(MODELPATH)/modelparameters.cc -o $(DIR_objs)/modelparameters.o $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) $(MODELPATH)/modelparameters.cc -o $(DIR_objs)/modelparameters.o $(CUDA_INC)
 
 $(DIR_objs)/GridSearch.o: 	
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) -o $@ GridSearch.cu $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ GridSearch.cu $(CUDA_INC)
 
 $(DIR_objs)/Levenberg_Marquardt.o: 	
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) -o $@ Levenberg_Marquardt.cu $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ Levenberg_Marquardt.cu $(CUDA_INC)
 
 $(DIR_objs)/MCMC.o: 	
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) -o $@ MCMC.cu $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ MCMC.cu $(CUDA_INC)
 
 $(DIR_objs)/BIC_AIC.o: 	
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) -o $@ BIC_AIC.cu $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ BIC_AIC.cu $(CUDA_INC)
 
 $(DIR_objs)/getPredictedSignal.o: 	
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) -o $@ getPredictedSignal.cu $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ getPredictedSignal.cu $(CUDA_INC)
 
 $(DIR_objs)/link_cudimot_gpu.o:	$(CUDIMOT_CUDA_OBJS)
-		$(NVCC) $(GPU_CARDS) -dlink $(CUDIMOT_CUDA_OBJS) -o $@ -L${CUDA}/lib64 -L${CUDA}/lib
+		$(NVCC) $(GPU_CARDs) -dlink $(CUDIMOT_CUDA_OBJS) -o $@ -L${CUDA}/lib64 -L${CUDA}/lib
 
 $(DIR_objs)/cudimot.o:
-		$(NVCC) $(GPU_CARDS) $(NVCC_FLAGS) -o $@ cudimot.cc $(CUDA_INC)
+		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ cudimot.cc $(CUDA_INC)
 
 ${CUDIMOT}:	${CUDIMOT_OBJS}
 		${CXX} ${CXXFLAGS} ${LDFLAGS} -o $(DIR_objs)/${modelname} ${CUDIMOT_OBJS} $(CUDIMOT_CUDA_OBJS) ${DLIBS} -lcudart -L${CUDA}/lib64 -L${CUDA}/lib
 		./generate_wrapper.sh
 
 $(DIR_objs)/testFunctions_${modelname}: 
-	$(NVCC) $(GPU_CARDS) -I$(MODELPATH) -O3 $(MAX_REGISTERS) $(MODELPATH)/modelparameters.cc testFunctions.cu -o $(DIR_objs)/testFunctions_${modelname} $(CUDA_INC)
+	$(NVCC) $(GPU_CARDs) -I$(MODELPATH) -O3 $(MAX_REGISTERS) $(MODELPATH)/modelparameters.cc testFunctions.cu -o $(DIR_objs)/testFunctions_${modelname} $(CUDA_INC)
 

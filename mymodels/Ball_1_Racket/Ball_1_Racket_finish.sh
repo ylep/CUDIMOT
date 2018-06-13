@@ -6,7 +6,7 @@
 #
 #   SHCOPYRIGHT
 
-bindir=${FSLDEVDIR}/bin
+bindir=${CUDIMOT}/bin
 
 Usage() {
     echo ""
