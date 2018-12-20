@@ -12,7 +12,7 @@ if [ "x$CUDIMOT" == "x" ]; then
 	echo ""
 	echo "Please, set enviroment variable CUDIMOT with the path where cuDIMOT is installed"
 	echo "The path must contain a bin directory with binary files, i.e. \$CUDIMOT/bin"
-	echo "For instance:   export CUDA=/home/moises/CUDIMOT"
+	echo "For instance:   export CUDIMOT=/home/moises/CUDIMOT"
 	echo ""
   exit 1
 fi

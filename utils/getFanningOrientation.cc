@@ -89,7 +89,7 @@ int main ( int argc, char **argv ){
   
   volume4D<float> fanning(ths.xsize(),ths.ysize(),ths.zsize(),3);
   fanning=0;
-  copybasicproperties(ths,fanning[0]);
+  copybasicproperties(ths,fanning);
 
 
   SymmetricMatrix dyad(3);dyad=0;
