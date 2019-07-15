@@ -20,13 +20,13 @@ namespace Cudimot{
       //when there are some non-positive entries, but not all are zero
       vector<int> minpositions;
       while (MinS<=0){
-	minpositions.push_back(pos);
-	Voxdata(pos)=MaxS;    //temporarilly make the non-positive values Max
-	MinS=Voxdata.Minimum1(pos);
+        minpositions.push_back(pos);
+        Voxdata(pos)=MaxS;    //temporarilly make the non-positive values Max
+        MinS=Voxdata.Minimum1(pos);
       }
       MinS=Voxdata.Minimum(); //Now find the Minimum of positive entries
       for (unsigned int i=0; i<minpositions.size(); i++)
-	Voxdata(minpositions[i])=MinS; //Replace non-positive entries with that minimum
+	      Voxdata(minpositions[i])=MinS; //Replace non-positive entries with that minimum
     }
   }
   
@@ -70,10 +70,10 @@ namespace Cudimot{
     if(size_last_part<(SIZE_PART*0.5)){ 
       // if last part is too small, we distribute its voxels between the others parts
       if(nparts-1){ // More than 1 part
-	size_part = size_part + size_last_part/(nparts-1);
-	nparts--;
+        size_part = size_part + size_last_part/(nparts-1);
+        nparts--;
       }else{
-	size_part = 0;
+	      size_part = 0;
       }
       size_last_part = nvox - ((nparts-1)*size_part);
     }
@@ -134,13 +134,13 @@ namespace Cudimot{
       voxmeas=dataM.Column(initial_vox+vox+1);
       if(opts.rician.value()) remove_NonPositive_entries(voxmeas); //So that log(data) does not give infinity in the likelihood
       for(int m=0;m<nmeas;m++){
-	meas_host[vox*nmeas+m]=voxmeas(m+1);
+	      meas_host[vox*nmeas+m]=voxmeas(m+1);
       }
     }
     // Fill with 0 the rest of the vector
     for(;vox<nvoxFit_part;vox++){
       for(int m=0;m<nmeas;m++){
-	meas_host[vox*nmeas+m]=0;
+	      meas_host[vox*nmeas+m]=0;
       }
     }
     

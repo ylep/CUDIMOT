@@ -92,13 +92,13 @@ namespace Cudimot{
     #pragma unroll
     for(int p=0; p<NPARAMS; p++){	
       if(LMbound_types[p]==BMIN)
-	MinInvTransform(p,params,transfParams);
+	      MinInvTransform(p,params,transfParams);
       else if(LMbound_types[p]==BMAX)
-	MaxInvTransform(p,params,transfParams);
+	      MaxInvTransform(p,params,transfParams);
       else if(LMbound_types[p]==BMINMAX)
-	MinMaxInvTransform(p,params,transfParams);
+	      MinMaxInvTransform(p,params,transfParams);
       else
-	transfParams[p]=params[p];
+	      transfParams[p]=params[p];
     }
   }
 
@@ -107,13 +107,13 @@ namespace Cudimot{
     #pragma unroll
     for(int p=0; p<NPARAMS; p++){	
       if(LMbound_types[p]==BMIN)
-	MinTransform(p,params,transfParams);
+	      MinTransform(p,params,transfParams);
       else if(LMbound_types[p]==BMAX)
-	MaxTransform(p,params,transfParams);
+	      MaxTransform(p,params,transfParams);
       else if(LMbound_types[p]==BMINMAX)
-	MinMaxTransform(p,params,transfParams);
+	      MinMaxTransform(p,params,transfParams);
       else
-	params[p]=transfParams[p];
+	      params[p]=transfParams[p];
     }
   }
   
@@ -123,12 +123,12 @@ namespace Cudimot{
     for(int p=0; p<NPARAMS; p++){
       //if(threadIdx.x==0) printf("Input derivatve %.20f\n",derivatives[p]);
       if(LMbound_types[p]==BMIN)
-	derivatives[p]=derivatives[p]*exp_gpu(transfParams[p]);
+	      derivatives[p]=derivatives[p]*exp_gpu(transfParams[p]);
       else if(LMbound_types[p]==BMAX)
-	derivatives[p]=derivatives[p]*(-exp_gpu(transfParams[p]));
+	      derivatives[p]=derivatives[p]*(-exp_gpu(transfParams[p]));
       else if(LMbound_types[p]==BMINMAX){
-	derivatives[p]=derivatives[p]*((LMbounds_max[p]-LMbounds_min[p])/(T)2.0)*(T)TwoDivPI;
-	derivatives[p]=derivatives[p]* ((T)SpeedFactor/ ((T)SpeedFactor*(T)SpeedFactor + transfParams[p]*transfParams[p]));
+        derivatives[p]=derivatives[p]*((LMbounds_max[p]-LMbounds_min[p])/(T)2.0)*(T)TwoDivPI;
+        derivatives[p]=derivatives[p]* ((T)SpeedFactor/ ((T)SpeedFactor*(T)SpeedFactor + transfParams[p]*transfParams[p]));
       }
       //else keep the same
     }
@@ -157,10 +157,10 @@ namespace Cudimot{
       T pred_error=Predicted_Signal(NPARAMS,parameters,myCFP,FixP);
       
       if(DEBUG){
-	int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
-	if(idVOX==debugVOX && idSubVOX==0){
-	  printf("PredictedSignal[%i]: %f\n",idMeasurement,pred_error);
-	}
+        int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
+        if(idVOX==debugVOX && idSubVOX==0){
+	        printf("PredictedSignal[%i]: %f\n",idMeasurement,pred_error);
+	      }
       }
       
       pred_error=pred_error-measurements[idMeasurement];
@@ -175,10 +175,10 @@ namespace Cudimot{
     if(idSubVOX==0){
       *result=accumulated_error;
       if(DEBUG){
-	int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
-	if(idVOX==debugVOX && idSubVOX==0){
-	   printf("COST FUNTION: %f\n",*result);
-	}
+        int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
+        if(idVOX==debugVOX && idSubVOX==0){
+          printf("COST FUNTION: %f\n",*result);
+        }
       }
     }
   }
@@ -205,52 +205,52 @@ namespace Cudimot{
     if(idSubVOX==0){
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	Gradient[p]=(T)0.0;
+	      Gradient[p]=(T)0.0;
       }
     }
     
     for(int iter=0;iter<max_iters;iter++){
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	// Maybe idMeasurement > nmeas, so set to 0
-     	myderivatives[p]=(T)0.0; 
+	      // Maybe idMeasurement > nmeas, so set to 0
+     	  myderivatives[p]=(T)0.0; 
       }
       T* myCFP = &CFP[idMeasurement*CFP_Tsize];
       T pred_error=(T)0.0;
       
       if(idMeasurement<nmeas){
-	pred_error=Predicted_Signal(NPARAMS,parameters,myCFP,FixP);
-	pred_error=pred_error-measurements[idMeasurement];
-	
-	Partial_Derivatives(NPARAMS,parameters,myCFP,FixP,myderivatives);
-	derivative_transf(params_transf,myderivatives);
+        pred_error=Predicted_Signal(NPARAMS,parameters,myCFP,FixP);
+        pred_error=pred_error-measurements[idMeasurement];
+        
+        Partial_Derivatives(NPARAMS,parameters,myCFP,FixP,myderivatives);
+        derivative_transf(params_transf,myderivatives);
 
-	if(DEBUG){
-	  int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
-	  if(idVOX==debugVOX && idSubVOX==0){
-	    for(int i=0;i<NPARAMS;i++){
-	      printf("Derivatives Measurement[%i]_Parameter[%i]: %f\n",idMeasurement,i,myderivatives[i]);
-	    }
-	  }
-	}
+        if(DEBUG){
+          int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
+          if(idVOX==debugVOX && idSubVOX==0){
+            for(int i=0;i<NPARAMS;i++){
+              printf("Derivatives Measurement[%i]_Parameter[%i]: %f\n",idMeasurement,i,myderivatives[i]);
+            }
+          }
+        }
       }
       
       #pragma unroll 
       for(int p=0;p<NPARAMS;p++){
-	myderivatives[p]=(T)2.0*pred_error*myderivatives[p];
-	#pragma unroll 
-	for (int offset=THREADS_VOXEL/2; offset>0; offset>>=1){
-	  myderivatives[p]+= shfl_down(myderivatives[p],offset);
-	}
+        myderivatives[p]=(T)2.0*pred_error*myderivatives[p];
+        #pragma unroll 
+        for (int offset=THREADS_VOXEL/2; offset>0; offset>>=1){
+          myderivatives[p]+= shfl_down(myderivatives[p],offset);
+        }
       }
       if(idSubVOX==0){
         #pragma unroll
-	for(int p=0;p<NPARAMS;p++){
-	  Gradient[p]+=myderivatives[p];
-	  if(LMfixed[p]){
-	    Gradient[p]=0;
-	  }
-	}
+        for(int p=0;p<NPARAMS;p++){
+          Gradient[p]+=myderivatives[p];
+          if(LMfixed[p]){
+            Gradient[p]=0;
+          }
+        }
       }
       idMeasurement+=THREADS_VOXEL;
     }  
@@ -277,10 +277,10 @@ namespace Cudimot{
     if(idSubVOX==0){
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	#pragma unroll
-	for(int p2=0;p2<NPARAMS;p2++){
-	  Hessian[p*NPARAMS+p2]=(T)0.0;
-	}
+        #pragma unroll
+        for(int p2=0;p2<NPARAMS;p2++){
+          Hessian[p*NPARAMS+p2]=(T)0.0;
+        }
       }
     }
 
@@ -290,43 +290,43 @@ namespace Cudimot{
 
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	myderivatives[p]=(T)0.0;
+	      myderivatives[p]=(T)0.0;
       }
       T pred_error=(T)0.0;
 
       if(idMeasurement<nmeas){
-	pred_error=Predicted_Signal(NPARAMS,parameters,myCFP,FixP);
-	pred_error=pred_error-measurements[idMeasurement];
-	Partial_Derivatives(NPARAMS,parameters,myCFP,FixP,myderivatives);
-	derivative_transf(params_transf,myderivatives);
+        pred_error=Predicted_Signal(NPARAMS,parameters,myCFP,FixP);
+        pred_error=pred_error-measurements[idMeasurement];
+        Partial_Derivatives(NPARAMS,parameters,myCFP,FixP,myderivatives);
+        derivative_transf(params_transf,myderivatives);
       }
  
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	#pragma unroll
-	for(int p2=0;p2<NPARAMS;p2++){
-	  T element = (T)2.0 * myderivatives[p] * myderivatives[p2];
-	  #pragma unroll
-	  for (int offset=THREADS_VOXEL/2; offset>0; offset>>=1){
-	    element+= shfl_down(element,offset);
-	  }
-	  if(idSubVOX==0){
-	    Hessian[p*NPARAMS+p2]+=element;
-	  }
-	}
+        #pragma unroll
+        for(int p2=0;p2<NPARAMS;p2++){
+          T element = (T)2.0 * myderivatives[p] * myderivatives[p2];
+          #pragma unroll
+          for (int offset=THREADS_VOXEL/2; offset>0; offset>>=1){
+            element+= shfl_down(element,offset);
+          }
+          if(idSubVOX==0){
+            Hessian[p*NPARAMS+p2]+=element;
+          }
+        }
       }
       idMeasurement+=THREADS_VOXEL;
     }
     if(idSubVOX==0){
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	#pragma unroll
-	for(int p2=0;p2<NPARAMS;p2++){
-	  if(LMfixed[p] || LMfixed[p2]){
-	    if(p==p2) Hessian[p*NPARAMS+p2]=(T)1.0;
-	    else Hessian[p*NPARAMS+p2]=(T)0.0;
-	  }
-	}
+        #pragma unroll
+        for(int p2=0;p2<NPARAMS;p2++){
+          if(LMfixed[p] || LMfixed[p2]){
+            if(p==p2) Hessian[p*NPARAMS+p2]=(T)1.0;
+            else Hessian[p*NPARAMS+p2]=(T)0.0;
+          }
+        }
       }
     }
   }
@@ -348,17 +348,17 @@ namespace Cudimot{
     if (idSubVOX<NPARAMS){
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	col_elems[p] = Hessian[p*NPARAMS+idSubVOX];
+	      col_elems[p] = Hessian[p*NPARAMS+idSubVOX];
       }
     }else if(idSubVOX==NPARAMS){
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	col_elems[p] = Gradient[p];
+	      col_elems[p] = Gradient[p];
       }
     }else{
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	col_elems[p] = (T)0.0;
+	      col_elems[p] = (T)0.0;
       }
     }
     
@@ -380,9 +380,9 @@ namespace Cudimot{
       // This_row = This_row - Pivot * row_of_diagonal_element
       #pragma unroll
       for (int row=col+1; row<NPARAMS; row++){
-	pivot  = col_elems[row];
-	pivot  = shfl(pivot,col);
-	col_elems[row] -= pivot*col_elems[col];
+        pivot  = col_elems[row];
+        pivot  = shfl(pivot,col);
+        col_elems[row] -= pivot*col_elems[col];
       }
     }
 
@@ -391,16 +391,16 @@ namespace Cudimot{
     for (int col=NPARAMS-1; col>0; col--) {
       // Eliminate all terms above diagonal element
       for (int row=0; row<col; row++) {
-	pivot  = col_elems[row];
-	pivot  = shfl(pivot,col);
-	col_elems[row] -= pivot*col_elems[col];
+        pivot  = col_elems[row];
+        pivot  = shfl(pivot,col);
+        col_elems[row] -= pivot*col_elems[col];
       }
     }
 
     if(idSubVOX==NPARAMS){
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	Solution[p] = col_elems[p];
+	      Solution[p] = col_elems[p];
       }
     }
     
@@ -481,22 +481,22 @@ namespace Cudimot{
     }
     if(DEBUG){
       if(idVOX==debugVOX){
-	printf("\n ----- Levenberg_Marquardt GPU algorithm: voxel %i -----\n",idVOX);
-	for(int i=0;i<NPARAMS;i++){
-	  printf("Initial Parameter[%i]: %f\n",i,params[i]);
-	}
-	for(int i=0;i<CFP_Tsize;i++){
-	  printf("Commonn Fixed Params[%i]: ",i);
-	  for(int j=0;j<nmeas;j++){
-	    printf("%f ",CFP_global[j*CFP_Tsize+i]);
-	  }
-	  printf("\n");
-	}
-	printf("Fix Parameters: ");
-	for(int i=0;i< FixP_Tsize;i++){
-	  printf("%f, ",FixP[i]);
-	}
-	printf("\n--------------------------------------------------------\n",idVOX);  
+        printf("\n ----- Levenberg_Marquardt GPU algorithm: voxel %i -----\n",idVOX);
+        for(int i=0;i<NPARAMS;i++){
+          printf("Initial Parameter[%i]: %f\n",i,params[i]);
+        }
+        for(int i=0;i<CFP_Tsize;i++){
+          printf("Commonn Fixed Params[%i]: ",i);
+          for(int j=0;j<nmeas;j++){
+            printf("%f ",CFP_global[j*CFP_Tsize+i]);
+          }
+          printf("\n");
+        }
+        printf("Fix Parameters: ");
+        for(int i=0;i< FixP_Tsize;i++){
+          printf("%f, ",FixP[i]);
+        }
+        printf("\n--------------------------------------------------------\n",idVOX);  
       }
     }
     invtransformAll(params,params_transf); //calculate params_transf  
@@ -518,7 +518,7 @@ namespace Cudimot{
 
     if(DEBUG){
       if(idVOX==debugVOX&&leader){
-	printf("---------------------- Iteration %i ---------------------\n",iter);
+	      printf("---------------------- Iteration %i ---------------------\n",iter);
       }
     }
 
@@ -530,10 +530,10 @@ namespace Cudimot{
     if(leader){
       #pragma unroll
       for (int i=0; i<NPARAMS; i++){
-	if(MARQUARDT)
-	  Hessian[(i*NPARAMS)+i]=((1+(*lambda))/(1+(*olambda)))*Hessian[i*NPARAMS+i];	//Levenberg-Marquardt
-	else
-	  Hessian[(i*NPARAMS)+i]+=(*lambda)-(*olambda);	//Levenberg
+        if(MARQUARDT)
+          Hessian[(i*NPARAMS)+i]=((1+(*lambda))/(1+(*olambda)))*Hessian[i*NPARAMS+i];	//Levenberg-Marquardt
+        else
+          Hessian[(i*NPARAMS)+i]+=(*lambda)-(*olambda);	//Levenberg
       }
     }
 
@@ -546,21 +546,21 @@ namespace Cudimot{
     if(leader){
       #pragma unroll
       for(int p=0;p<NPARAMS;p++){
-	step[p]=params_transf[p]-step[p];
+	      step[p]=params_transf[p]-step[p];
       }
       transformAll(params,step);
 
       if(DEBUG){
-	if(idVOX==debugVOX){
-	  for(int i=0;i<NPARAMS;i++){
-	    printf("Gradient[%i]: %f   ",i,Gradient[i]);
-	  }
-	  printf("\n");
-	  for(int i=0;i<NPARAMS;i++){
-	    printf("Proposed[%i]: %f   ",i,params[i]);
-	  }
-	  printf("\n");
-	}
+        if(idVOX==debugVOX){
+          for(int i=0;i<NPARAMS;i++){
+            printf("Gradient[%i]: %f   ",i,Gradient[i]);
+          }
+          printf("\n");
+          for(int i=0;i<NPARAMS;i++){
+            printf("Proposed[%i]: %f   ",i,params[i]);
+          }
+          printf("\n");
+        }
       }
     }
     
@@ -572,30 +572,30 @@ namespace Cudimot{
 
     if(leader){
       if ( *success = ((*ncf) < (*pcf))){ 
-	*olambda = 0.0;
+	      *olambda = 0.0;
         #pragma unroll
-	for(int i=0;i<NPARAMS;i++){
-	  params_transf[i]=step[i];
-	}
-	*lambda=(*lambda)/10.0;
+        for(int i=0;i<NPARAMS;i++){
+          params_transf[i]=step[i];
+        }
+	      *lambda=(*lambda)/10.0;
 	
-	if (zero_cf_diff_conv(pcf,ncf)){
-	  *end=true;
-	}
-	*pcf=*ncf;
+        if (zero_cf_diff_conv(pcf,ncf)){
+          *end=true;
+        }
+        *pcf=*ncf;
       }else{
-	*olambda=*lambda;
-	*lambda=(*lambda)*10.0;
-	if(*lambda > LTOL){ 
-	 *end=true;
-	}
-	// undo step in parameters
-	transformAll(params,params_transf);
+        *olambda=*lambda;
+        *lambda=(*lambda)*10.0;
+        if(*lambda > LTOL){ 
+          *end=true;
+        }
+        // undo step in parameters
+        transformAll(params,params_transf);
       }
       if(DEBUG){
-	if(idVOX==debugVOX){
-	  printf("--------------------------------------------------------\n");  
-	}
+        if(idVOX==debugVOX){
+          printf("--------------------------------------------------------\n");  
+        }
       }
     }
     //__threadfence_block(); // end,sucess updated
@@ -614,9 +614,9 @@ namespace Cudimot{
     }
     if(DEBUG){
       if(idVOX==debugVOX){
-	for(int i=0;i<NPARAMS;i++){
-	  printf("Final Parameter[%i]: %f\n",i,params[i]);
-	}
+        for(int i=0;i<NPARAMS;i++){
+          printf("Final Parameter[%i]: %f\n",i,params[i]);
+        }
       }
     }
   }
@@ -659,7 +659,7 @@ namespace Cudimot{
     cudaMemcpyToSymbol(LMbounds_min,bounds_min_host,NPARAMS*sizeof(float));
     cudaMemcpyToSymbol(LMbounds_max,bounds_max_host,NPARAMS*sizeof(float));
     cudaMemcpyToSymbol(LMfixed,fixed_host,NPARAMS*sizeof(int));
-    sync_check("Levenberg_Marquardt: Setting Bounds - Fixed");
+    sync_check("Levenberg_Marquardt: Setting Bounds - Constant Memory");
   }
   
   template <typename T>
@@ -689,15 +689,15 @@ namespace Cudimot{
     
     if(!DEBUG){
       if(Marquardt){
-	levenberg_kernel<T,true,false><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+	      levenberg_kernel<T,true,false><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
       }else{
-	levenberg_kernel<T,false,false><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+	      levenberg_kernel<T,false,false><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
       }
     }else{
       if(Marquardt){
-	levenberg_kernel<T,true,true><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+	      levenberg_kernel<T,true,true><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
       }else{
-	levenberg_kernel<T,false,true><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
+	      levenberg_kernel<T,false,true><<<nblocks,threads_block,amount_shared_mem>>>(nmeas,CFP_size,FixP_size,meas,params,CFP,FixP,max_iterations,debugVOX);
       }
     }
     sync_check("Levenberg_Marquardt Kernel");
