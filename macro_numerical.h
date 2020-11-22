@@ -6,6 +6,8 @@
 #define MINSTEP 1e-6
 #define nonzerosign(a) ((a)<0?-1:1)
 
+MACRO T Predicted_Signal(int nparams, T* P, T* myCFP, T* FixP);
+
 MACRO T numerical(
 		     int idpar, 
 		     T* P, 	
