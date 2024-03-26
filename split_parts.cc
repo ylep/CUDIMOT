@@ -12,8 +12,11 @@
 #include "cudimotoptions.h"
 #include "Model.h"
 
+using namespace std;
 using namespace Cudimot;
 using namespace boost::filesystem;
+using namespace NEWMAT;
+using MISCMATHS::num2str;
 
 void save_part(Matrix data, string path, string name, int idpart){
   int nvox = data.Ncols();

@@ -14,6 +14,8 @@
 #include "macro_numerical.h"
 #include "modelfunctions.h"
 
+using namespace std;
+
 namespace Cudimot{
 
 #define VOXELS_BLOCK 8

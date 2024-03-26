@@ -17,6 +17,7 @@
 #include "utils/log.h"
 #include "utils/tracer_plus.h"
 
+using namespace std;
 using namespace Utilities;
 
 namespace Cudimot {

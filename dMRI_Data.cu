@@ -8,6 +8,8 @@
 
 #include "dMRI_Data.h"
 
+using namespace std;
+
 namespace Cudimot{
   
   template <typename T>

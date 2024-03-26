@@ -14,6 +14,7 @@
 #include "dMRI_Data.h"
 #include "Model.h"
     
+using namespace std;
 using namespace Cudimot;
 using namespace boost::filesystem;
 

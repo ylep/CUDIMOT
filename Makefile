@@ -20,13 +20,13 @@ endif
 
 MODELPATH= mymodels/$(modelname)
 
-NVCC_FLAGS = -I$(MODELPATH) -O3 -dc $(MAX_REGISTERS)
+NVCC_FLAGS = -I$(MODELPATH) -O3 -dc $(MAX_REGISTERS) -DARMA_ALLOW_FAKE_GCC
 #-Xptxas -v 
 #-G -lineinfo
 
 CUDA_INC=-I${CUDA}/lib -I${CUDA}/lib64
 
-CUDA_INC = -I. -I${FSLDIR}/extras/include/newmat -I${FSLDIR}/include
+CUDA_INC = -I. -I${FSLDIR}/include/armawrap -I${FSLDIR}/include
 SM_20 = -gencode arch=compute_20,code=sm_20
 SM_21 = -gencode arch=compute_20,code=sm_21
 SM_30 = -gencode arch=compute_30,code=sm_30
@@ -39,8 +39,8 @@ SM_61 = -gencode arch=compute_61,code=sm_61
 SM_70 = -gencode arch=compute_70,code=sm_70
 
 #for Realease
-GPU_CARDs = -gencode arch=compute_50,code=sm_50 -gencode arch=compute_50,code=compute_50
 #GPU_CARDs = $(SM_30) $(SM_35) $(SM_37) $(SM_50) $(SM_52)
+GPU_CARDs = --gpu-code=compute_50 --gpu-architecture=compute_50
 #$(SM_60) $(SM_61)
 
 #for FMRIB
@@ -48,10 +48,10 @@ GPU_CARDs = -gencode arch=compute_50,code=sm_50 -gencode arch=compute_50,code=co
 
 PROJNAME = CUDIMOT
 
-USRINCFLAGS = -I${INC_NEWMAT} -I${INC_NEWRAN} -I${INC_CPROB} -I${INC_PROB} -I${INC_BOOST} -I${INC_ZLIB} -I$(MODELPATH) 
+USRINCFLAGS = -I${FSLDIR}/include/armawrap -I${INC_NEWMAT} -I${INC_NEWRAN} -I${INC_CPROB} -I${INC_PROB} -I${INC_BOOST} -I${INC_ZLIB} -I$(MODELPATH)
 USRLDFLAGS = -L${LIB_NEWMAT} -L${LIB_NEWRAN} -L${LIB_CPROB} -L${LIB_PROB} -L${LIB_ZLIB}
 
-DLIBS = -lwarpfns -lbasisfield -lmeshclass -lnewimage -lutils -lmiscmaths -lnewmat -lnewran -lNewNifti -lznz -lcprob -lprob -lm -lz
+DLIBS = -lfsl-warpfns -lfsl-basisfield -lfsl-meshclass -lfsl-newimage -lfsl-utils -lfsl-miscmaths -lfsl-newran -lfsl-NewNifti -lfsl-znz -lfsl-cprob -llapack -lm -lz -lcudadevrt
 
 CUDIMOT=$(DIR_objs)/${modelname}
 
@@ -94,10 +94,10 @@ $(DIR_objs)/cudimotoptions.o:
 	${CXX} ${CXXFLAGS} ${LDFLAGS} -c -o $@ cudimotoptions.cc ${DLIBS} 
 
 $(DIR_objs)/split_parts_${modelname}: $(DIR_objs)/cudimotoptions.o $(DIR_objs)/link_cudimot_gpu.o
-	${CXX} ${CXXFLAGS} $(USRINCFLAGS) ${LDFLAGS} -o $@ $(DIR_objs)/cudimotoptions.o $(DIR_objs)/link_cudimot_gpu.o split_parts.cc ${DLIBS} $(CUDIMOT_CUDA_OBJS) -lcudart -lboost_filesystem -lboost_system -L${CUDA}/lib64 -L${CUDA}/lib
+	${CXX} ${CXXFLAGS} $(USRINCFLAGS) ${LDFLAGS} -o $@ $(DIR_objs)/cudimotoptions.o $(DIR_objs)/link_cudimot_gpu.o split_parts.cc $(CUDIMOT_CUDA_OBJS) ${DLIBS} -lcudart -lboost_filesystem -lboost_system -L${CUDA}/lib64 -L${CUDA}/lib
 
 $(DIR_objs)/merge_parts_${modelname}: $(DIR_objs)/cudimotoptions.o $(DIR_objs)/link_cudimot_gpu.o
-	${CXX} ${CXXFLAGS} ${LDFLAGS} -o $@ $(DIR_objs)/cudimotoptions.o $(DIR_objs)/link_cudimot_gpu.o merge_parts.cc ${DLIBS} $(CUDIMOT_CUDA_OBJS) -lcudart -lboost_filesystem -lboost_system -L${CUDA}/lib64 -L${CUDA}/lib
+	${CXX} ${CXXFLAGS} ${LDFLAGS} -o $@ $(DIR_objs)/cudimotoptions.o $(DIR_objs)/link_cudimot_gpu.o merge_parts.cc $(CUDIMOT_CUDA_OBJS) ${DLIBS} -lcudart -lboost_filesystem -lboost_system -L${CUDA}/lib64 -L${CUDA}/lib
 
 $(DIR_objs)/init_gpu.o: 
 		$(NVCC) $(GPU_CARDs) $(NVCC_FLAGS) -o $@ init_gpu.cu $(CUDA_INC)

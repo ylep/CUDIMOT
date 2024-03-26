@@ -26,6 +26,9 @@
 #include "gridOptions.h"
 #include "cudimotoptions.h"
 
+using namespace NEWMAT;
+using MISCMATHS::num2str;
+
 namespace Cudimot{
 
   template <typename T>

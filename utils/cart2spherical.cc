@@ -13,6 +13,7 @@
 #include "newimage/newimageall.h"
 
 using namespace std;
+using namespace NEWMAT;
 
 int main (int argc, char* argv[]){
   cout << "Cartesian coordinates to Spherical coordinates" << endl;

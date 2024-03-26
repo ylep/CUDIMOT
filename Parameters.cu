@@ -8,6 +8,9 @@
 
 #include "Parameters.h"
 
+using namespace NEWMAT;
+using MISCMATHS::read_ascii_matrix;
+
 namespace Cudimot{
   
   template <typename T>
