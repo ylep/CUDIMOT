@@ -20,7 +20,8 @@ endif
 
 MODELPATH= mymodels/$(modelname)
 
-NVCC_FLAGS = -I$(MODELPATH) -O3 -dc $(MAX_REGISTERS) -DARMA_ALLOW_FAKE_GCC
+NVCC_FLAGS = -I$(MODELPATH) -O3 -dc $(MAX_REGISTERS) -DARMA_ALLOW_FAKE_GCC --compiler-bindir=/usr/bin/gcc-10
+# --verbose --keep --keep-dir=/volatile/yl243478/fsl-cudimot/tmpcomp
 #-Xptxas -v 
 #-G -lineinfo
 
@@ -81,7 +82,7 @@ makedir:
 	mkdir -p $(FSLDEVDIR)/bin
 	mkdir -p $(DIR_objs)
 
-all: 	cleanall makedir ${XFILES}
+all: 	makedir ${XFILES}
 
 $(DIR_objs)/cart2spherical: 
 	${CXX} ${CXXFLAGS} ${LDFLAGS} -o $@ utils/cart2spherical.cc ${DLIBS} 

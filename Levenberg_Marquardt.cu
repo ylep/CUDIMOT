@@ -498,7 +498,7 @@ namespace Cudimot{
         for(int i=0;i< FixP_Tsize;i++){
           printf("%f, ",FixP[i]);
         }
-        printf("\n--------------------------------------------------------\n",idVOX);  
+        printf("\n--------------------------------------------------------\n");
       }
     }
     invtransformAll(params,params_transf); //calculate params_transf  

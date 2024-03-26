@@ -80,7 +80,7 @@ namespace Cudimot{
     if(DEBUG){
       int idVOX= (blockIdx.x*VOXELS_BLOCK)+int(threadIdx.x/THREADS_VOXEL);
       if(idVOX==debugVOX){
-	      printf("----\n",par,params[par]);
+	      printf("----\n");
 	      printf("Proposing Value for Parameter_%i: %f\n",par,params[par]);	
       }
     }
@@ -453,7 +453,7 @@ namespace Cudimot{
           for(int i=0;i<FixP_Tsize;i++){
             printf("%f, ",FixP[i]);
           }
-          printf("\n--------------------------------------------------------\n",idVOX);  
+          printf("\n--------------------------------------------------------\n");
 	      }
       }
     }
