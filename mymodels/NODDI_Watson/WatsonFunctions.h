@@ -52,7 +52,7 @@ MACRO T dawson(T x){  // From Numerical Recipes in C
 
 MACRO void WatsonHinderedDiffusionCoeff(//input
 					T kappa,
-					// dPar is a constant
+					T Dparallel,
 					T dPerp,
 					//output
 					T& dPar_equivalent,

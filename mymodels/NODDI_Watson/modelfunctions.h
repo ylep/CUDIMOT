@@ -9,6 +9,7 @@
 // P[2]: kappa
 // P[3]: th
 // P[4]: ph
+// P[5]:d_par
 
 // CFP[0:2] are bvecs 
 // CFP[3] are bvals
@@ -29,12 +30,12 @@ MACRO T Calculate_ExtraCellular(T* P,
   // Calculate Signal from ExtraCellular compartment //
   
   //dPerp = dPar*(1-f);
-  T Dperpendicular = Dparallel*(1-P[1]);
+  T Dperpendicular = P[5]*(1-P[1]);
   
   T Dpar_equivalent;
   T Dperp_equivalent;
   
-  WatsonHinderedDiffusionCoeff(P[2],Dperpendicular,Dpar_equivalent,Dperp_equivalent);
+  WatsonHinderedDiffusionCoeff(P[2],P[5],Dperpendicular,Dpar_equivalent,Dperp_equivalent);
   
   //exp(-bval.*((dPar - dPerp)*cosThetaSq + dPerp));
   T ExtraCell = exp_gpu(-CFP[3]*((Dpar_equivalent - Dperp_equivalent)*xv*xv + Dperp_equivalent));
@@ -48,7 +49,7 @@ MACRO T Calculate_IntraCellular(T* P,
 {
   // Calculate Signal from IntraCellular compartment //
 
-  T parComp =-CFP[3]*Dparallel; // Parallel component: -bval * dintra
+  T parComp =-CFP[3]*P[5]; // Parallel component: -bval * dintra
   // Radius is 0, so no Perpendicular Component
 
   // Compute Legendre weighted signal

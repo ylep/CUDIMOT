@@ -3,7 +3,7 @@
 
 ///// Edit this /////
 typedef double MyType;
-#define NPARAMS 5 // fiso, fintra, kappa, th, ph
+#define NPARAMS 6 // fiso, fintra, kappa, th, ph, d_par
 #define NCFP 2 // bvecs, bvals
 #define NFIXP 1 // S0
 /////////////////////
