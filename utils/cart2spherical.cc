@@ -45,7 +45,7 @@ int main (int argc, char* argv[]){
 	cart(2)=Cartesian[1](x,y,z);
 	cart(3)=Cartesian[2](x,y,z);
      
-	cart2sph(cart,th,ph);
+	MISCMATHS::cart2sph(cart,th,ph);
 
 	SphericalTH(x,y,z)=th;
 	SphericalPH(x,y,z)=ph;
