@@ -7,7 +7,7 @@ ifndef FSLDEVDIR
 $(error Error: FSLDEVDIR has not been set)
 endif
 
-NVCC = ${CUDA}/bin/nvcc
+NVCC ?= ${CUDA}/bin/nvcc
 DIR_objs=./objs
 
 MAX_REGISTERS= -maxrregcount 64
